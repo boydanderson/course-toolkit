@@ -5,6 +5,11 @@ toolkit. Read the main [README.md](README.md) first for the concepts
 (session kinds, the renderer backend contract, path resolution) — this
 file is the *task checklist*, not a second copy of that explanation.
 
+If you're modifying the toolkit itself (not just integrating a course
+into it), run `tests/run.sh` before and after — it's the regression
+suite for exactly the bugs in the "Gotchas" section below, all of which
+were real and all of which it now catches.
+
 ## The integration task, in order
 
 1. **Add the submodule.**

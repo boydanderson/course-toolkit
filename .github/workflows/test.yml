@@ -1,0 +1,26 @@
+name: Test
+
+# Runs tests/run.sh's full suite (including the real pdflatex compiles
+# in tests/backends-latex-beamer.test.sh) on every push and PR.
+#
+# Uses the texlive/texlive:latest container -- same known-good image
+# cs1101s/course-materials' own CI already uses to build real Beamer
+# PDFs, rather than guessing at a minimal apt package set for beamer/
+# lmodern/fontenc (a much larger image than strictly necessary, but a
+# proven one).
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    container:
+      image: texlive/texlive:latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run test suite
+        run: bash tests/run.sh

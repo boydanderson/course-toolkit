@@ -136,3 +136,13 @@ feature simply never produces that directory.
 Every script here targets bash 3.2, since macOS ships that as
 `/bin/bash` by default. Use `tr`/`sed` for case conversion, not bash
 4+-only parameter expansion (`${var,,}`, `${var^}`).
+
+## Testing
+
+```bash
+tests/run.sh               # full suite, including real pdflatex compiles
+tests/run.sh --skip-latex  # skip those if you don't have LaTeX installed
+```
+
+No external test framework — see `tests/assert.sh`. Runs in CI
+(`.github/workflows/test.yml`) on every push and PR.
