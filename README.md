@@ -62,11 +62,15 @@ for every renderer-specific step.
 - **A content-to-slot map** — `SLOT_ID|SOURCE_PATH` pairs, so the build
   knows which file backs each scheduled slot. No fixed naming
   convention is assumed — lay content out however suits the course.
-- **Release/label/note config** the enrichment layer reads (all
-  optional, all empty-safe): a release allow-list (one slot ID per
-  line), a `WEEK|KIND_ID|LABEL` override file for a week+kind with no
-  real occurrence (e.g. an in-class-only session with no take-home
-  sheet), a `WEEK|NOTE` file for maintainer notes.
+- **Release/label/note/holiday config** the enrichment layer reads (all
+  optional, all empty-safe — pass `/dev/null` for any you don't need):
+  a release allow-list (one slot ID per line), a `WEEK|KIND_ID|LABEL`
+  override file for a week+kind with no real occurrence (e.g. an
+  in-class-only session with no take-home sheet), a `WEEK|NOTE` file for
+  maintainer notes, a `DATE|NAME` holiday calendar, and a
+  `HOLIDAY_NAME|EMOJI` map (an occurrence whose date is in the holiday
+  file renders as "No `<kind>` (`<emoji>` `<holiday>`)", overriding even
+  an authored/released slot).
 - Source content in whatever format the chosen `RENDERER` expects.
 
 ## Using it
@@ -93,18 +97,24 @@ From there: `semester_weeks` walks the teaching calendar,
 `backend_build_slot`/`backend_content_hash`/`backend_extract_title`
 dispatch into the chosen renderer, `get_slot_version`/`bump_slot_version`
 track versions, and `render_markdown_calendar`/`render_html_calendar`
-produce the calendar tables.
+produce the calendar tables (see each function's own header comment for
+its full argument list).
 
 ## Renderer backend contract
 
 A backend at `backends/<name>/` implements three executable scripts:
 
-- **`build-slot.sh SOURCE_PATH VARIANT OUTPUT_PATH`** — produce one
-  variant's artifact for one slot. `VARIANT` is an opaque string the
-  backend fully owns the meaning of (an extra header file, a
-  compile-time flag, whatever fits the toolchain).
-- **`content-hash.sh SOURCE_PATH VARIANT`** — print a hash of every
-  input that affects this slot/variant's output.
+- **`build-slot.sh SOURCE_PATH VARIANT OUTPUT_PATH [SLOT_ID]`** —
+  produce one variant's artifact for one slot. `VARIANT` is an opaque
+  string the backend fully owns the meaning of (an extra header file, a
+  compile-time flag, whatever fits the toolchain). `SLOT_ID` is optional
+  — a backend that supports it can substitute the real computed slot ID
+  into the source at build time (e.g. `latex-beamer` replaces a literal
+  `\title{PLACEHOLDER_SLOT: ...}`), for content authored before its
+  eventual week is known.
+- **`content-hash.sh SOURCE_PATH VARIANT [SLOT_ID]`** — print a hash of
+  every input that affects this slot/variant's output (include `SLOT_ID`
+  in it if the backend's `build-slot.sh` uses it).
 - **`extract-title.sh SOURCE_PATH`** — print the slot's display title
   (empty if none).
 
