@@ -1,0 +1,12 @@
+% Generic Beamer preamble -- deliberately minimal and de-branded. This is
+% NOT a port of cs1101s/course-materials' beamerthemeCS1101S.sty (custom
+% colors, macros, nebula badge, etc.) -- that's course-specific visual
+% design, ported and reconciled against CS1101S's real output at Stage
+% 4-5 (the baseline-diff migration), not something the generic backend
+% bakes in. This proves the compile pipeline end-to-end with the
+% standard Beamer theme; a course wanting its own look supplies its own
+% preamble (see build-slot.sh's PREAMBLE override).
+\usetheme{default}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\setbeamertemplate{navigation symbols}{}

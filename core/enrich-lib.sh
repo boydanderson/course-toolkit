@@ -24,6 +24,24 @@ slot_title() {
     grep -vE '^\s*#|^\s*$' "$titles_file" | grep "^${slot_id}|" | head -1 | cut -d'|' -f2-
 }
 
+# compose_slot_title SLOT_ID TITLE -> "SLOT_ID: TITLE", or just SLOT_ID
+# if TITLE is empty. Won't double-prepend if TITLE already starts with
+# "SLOT_ID: " -- a backend's extract-title (e.g. backends/latex-beamer's)
+# can't safely strip a slot-ID prefix itself (it has no way to know what
+# a course's slot IDs look like), so a raw \title{L1A: Topic} comes back
+# with the prefix still on it; this is the one place that knows both
+# values and can dedupe correctly rather than guessing a strip pattern.
+compose_slot_title() {
+    local slot_id="$1" title="$2"
+    if [ -z "$title" ]; then
+        echo "$slot_id"
+    elif [ "$title" = "${title#${slot_id}: }" ]; then
+        echo "${slot_id}: ${title}"
+    else
+        echo "$title"
+    fi
+}
+
 # slot_kind_label WEEK KIND_ID LABELS_FILE -> a maintainer-written label
 # override for a week+kind that otherwise has no occurrence (e.g. a
 # one-off in-class-only session, never a real slot) -- generalizes

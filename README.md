@@ -6,10 +6,22 @@ generator, extracted so more than one course can use it. Consumed by a
 course repo as a **git submodule**, pinned to a specific commit (never
 tracked against `main` — see "Versioning" below).
 
-Status: early scaffold. Being extracted from
+Status: `core/` is implemented and verified against synthetic fixtures
+for two real target courses (CS1101S's shape and CS2030S's) --
+`core/schedule-lib.sh`, `core/version-lib.sh`, `core/course-lib.sh`,
+`core/backend-lib.sh`, `core/semester-lib.sh`, `core/enrich-lib.sh`,
+`core/render-markdown.sh`, `core/render-html.sh`. `backends/latex-beamer/`
+implements the renderer contract for real and has actually compiled a
+test slide to PDF via `pdflatex`. `backends/test/` is a minimal
+reference implementation, not for real use.
+
+Not yet done: wiring an actual consuming repo (starting with
 [cs1101s/course-materials](https://github.com/cs1101s/course-materials),
-which is also the first consumer once the extraction is complete. Nothing
-here is implemented yet.
+which is also the first real consumer) up to this toolkit as a
+submodule, and a `backends/typst/` implementation (a real second course,
+CG2111A, uses Typst with a student/instructor variant realized via a
+compile-time `--input` flag rather than separate source files -- the
+contract already accommodates this, just not yet implemented).
 
 ## Layout
 

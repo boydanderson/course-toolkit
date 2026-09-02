@@ -72,7 +72,7 @@ render_kind_cell() {
         [ -z "$rkind" ] && continue
         local title released links
         title="$(slot_title "$rslot" "$titles_file")"
-        [ -z "$title" ] && title="$rslot" || title="$rslot: $title"
+        title="$(compose_slot_title "$rslot" "$title")"
         if is_slot_released "$rslot" "$allowlist_file"; then
             released=1
         else

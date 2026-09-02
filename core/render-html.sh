@@ -82,7 +82,7 @@ render_kind_cell_html() {
         [ -z "$rkind" ] && continue
         local title released links
         title="$(slot_title "$rslot" "$titles_file")"
-        [ -z "$title" ] && title="$rslot" || title="$rslot: $title"
+        title="$(compose_slot_title "$rslot" "$title")"
         if is_slot_released "$rslot" "$allowlist_file"; then released=1; else released=0; fi
         links="$(_html_variant_links "$rkind" "$rslot" "$rvariants" "$base_url" "$released")"
         cell_html="${cell_html}<div style=\"font-weight:600;\">$(echo "$title" | _html_escape)</div><div style=\"margin-top:2px;font-size:0.85rem;\">${links}</div>"
