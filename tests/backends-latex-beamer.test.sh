@@ -22,6 +22,21 @@ test_backends_latex_beamer() {
     assert_eq "extract-title.sh, with SLOT_ID: substituted" \
         "L1A: Sample Topic" "$("$backend/extract-title.sh" "$body" L1A)"
 
+    # LaTeX-escaped punctuation in a \title{} must come back unescaped --
+    # regression: a real title ("Recursion \& Iteration") used to come
+    # back with the backslash still attached, which is meaningless once
+    # it lands in a rendered Markdown table or an already-HTML-escaped
+    # Canvas cell.
+    local escaped_title="$scratch/escaped-title.tex"
+    printf '%s\n' '\title{R2: Recursion \& Iteration}' > "$escaped_title"
+    assert_eq "extract-title.sh un-escapes \\& in a title" \
+        "R2: Recursion & Iteration" "$("$backend/extract-title.sh" "$escaped_title")"
+
+    local escaped_psetheader="$scratch/escaped-psetheader.tex"
+    printf '%s\n' '\psetheader{AY2627S1}{3}{50\% Off \& Rising}' > "$escaped_psetheader"
+    assert_eq "extract-title.sh un-escapes \\% and \\& in a \\psetheader{} title" \
+        "50% Off & Rising" "$("$backend/extract-title.sh" "$escaped_psetheader")"
+
     local h1 h2 h3
     h1="$("$backend/content-hash.sh" "$body" view L1A)"
     h2="$("$backend/content-hash.sh" "$body" view L1A)"

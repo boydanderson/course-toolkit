@@ -29,10 +29,19 @@ source_path="$1"
 slot_id="${2:-}"
 [ -f "$source_path" ] || { echo ""; exit 0; }
 
-title=$(grep '\\title{' "$source_path" 2>/dev/null | head -1 | sed -n 's/.*\\title{\([^}]*\)}.*/\1/p')
+# Strip the backslash off common LaTeX-escaped punctuation (e.g.
+# "Recursion \& Iteration" -> "Recursion & Iteration") so a title reads
+# correctly once it lands in Markdown/HTML -- neither destination wants
+# the LaTeX escape itself, and HTML-escaping the result is the caller's
+# job, not this script's.
+_unescape_latex_title() {
+    sed -E 's/\\([&%$#_{}])/\1/g'
+}
+
+title=$(grep '\\title{' "$source_path" 2>/dev/null | head -1 | sed -n 's/.*\\title{\([^}]*\)}.*/\1/p' | _unescape_latex_title)
 if [ -z "$title" ]; then
     title=$(grep '\\psetheader{' "$source_path" 2>/dev/null | head -1 \
-        | sed -n 's/^\\psetheader{[^}]*}{[^}]*}{\(.*\)}$/\1/p')
+        | sed -n 's/^\\psetheader{[^}]*}{[^}]*}{\(.*\)}$/\1/p' | _unescape_latex_title)
 fi
 if [ -n "$slot_id" ] && [ "${title#PLACEHOLDER_SLOT: }" != "$title" ]; then
     title="${slot_id}: ${title#PLACEHOLDER_SLOT: }"
