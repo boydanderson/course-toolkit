@@ -13,12 +13,19 @@
 # content-derived (a human-authored string the schedule can't know).
 #
 # A backend at backends/<name>/ implements exactly three scripts:
-#   build-slot.sh SOURCE_PATH VARIANT OUTPUT_PATH
-#       Produce VARIANT's artifact for one slot at OUTPUT_PATH.
-#   content-hash.sh SOURCE_PATH VARIANT
+#   build-slot.sh SOURCE_PATH VARIANT OUTPUT_PATH [SLOT_ID]
+#       Produce VARIANT's artifact for one slot at OUTPUT_PATH. SLOT_ID
+#       (this slot's computed public ID, e.g. "L4A" -- optional, empty if
+#       the caller doesn't have/want one) is for a backend that supports
+#       injecting it into the source at build time (e.g. latex-beamer's
+#       "PLACEHOLDER_SLOT" template substitution) -- a backend that
+#       doesn't need this just ignores the argument.
+#   content-hash.sh SOURCE_PATH VARIANT [SLOT_ID]
 #       Print a hash of every input that affects this slot/variant's
 #       output (the backend decides what counts -- e.g. shared preamble
-#       files, not just SOURCE_PATH itself).
+#       files, not just SOURCE_PATH itself; SLOT_ID matters too for a
+#       backend that substitutes it into the source, like latex-beamer's
+#       PLACEHOLDER_SLOT).
 #   extract-title.sh SOURCE_PATH
 #       Print the slot's display title (empty if none), for calendar/
 #       Canvas-page text.
@@ -44,15 +51,15 @@ _backend_script() {
 }
 
 backend_build_slot() {
-    local source_path="$1" variant="$2" output_path="$3" script
+    local source_path="$1" variant="$2" output_path="$3" slot_id="${4:-}" script
     script="$(_backend_script build-slot.sh)" || return 1
-    "$script" "$source_path" "$variant" "$output_path"
+    "$script" "$source_path" "$variant" "$output_path" "$slot_id"
 }
 
 backend_content_hash() {
-    local source_path="$1" variant="$2" script
+    local source_path="$1" variant="$2" slot_id="${3:-}" script
     script="$(_backend_script content-hash.sh)" || return 1
-    "$script" "$source_path" "$variant"
+    "$script" "$source_path" "$variant" "$slot_id"
 }
 
 backend_extract_title() {

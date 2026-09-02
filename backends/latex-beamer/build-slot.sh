@@ -1,6 +1,6 @@
 #!/bin/bash
 # Compiles a Beamer-body source file into a PDF via pdflatex.
-# Usage: build-slot.sh SOURCE_PATH VARIANT OUTPUT_PATH
+# Usage: build-slot.sh SOURCE_PATH VARIANT OUTPUT_PATH [SLOT_ID]
 #
 # SOURCE_PATH is expected to contain \title{...}/\author{...}/etc.
 # through \begin{document}...\end{document} (everything except the
@@ -14,10 +14,20 @@
 # this variant, so a kind that doesn't need per-variant styling
 # (studios' "problem"/"solution", or a "none" variant) just gets the
 # shared preamble.
+#
+# SLOT_ID (optional): if given and the source's \title{} starts with the
+# literal placeholder "PLACEHOLDER_SLOT: ", it's replaced with
+# "SLOT_ID: " before compiling -- a source file whose calendar slot
+# isn't known until the schedule engine assigns it (e.g. content
+# authored before/independent of its eventual week) can be written once
+# as \title{PLACEHOLDER_SLOT: Topic} and always get the correct current
+# slot baked into the compiled PDF. A no-op if SLOT_ID is empty or the
+# literal placeholder isn't present -- never touches a title that
+# already has its own real text.
 set -euo pipefail
 BACKEND_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-source_path="$1" variant="$2" output_path="$3"
+source_path="$1" variant="$2" output_path="$3" slot_id="${4:-}"
 
 if [ ! -f "$source_path" ]; then
     echo "build-slot.sh: source file not found: $source_path" >&2
@@ -35,7 +45,11 @@ combined="$job_dir/slot.tex"
     [ -f "$variant_header" ] && cat "$variant_header"
     # SOURCE_PATH already contains \begin{document}...\end{document}
     # (the "body", per the header comment above) -- not added here.
-    cat "$source_path"
+    if [ -n "$slot_id" ]; then
+        sed "s/\\\\title{PLACEHOLDER_SLOT: /\\\\title{${slot_id}: /" "$source_path"
+    else
+        cat "$source_path"
+    fi
 } > "$combined"
 
 if ! pdflatex -interaction=nonstopmode -halt-on-error -output-directory "$job_dir" "$combined" > "$job_dir/pdflatex.log" 2>&1; then

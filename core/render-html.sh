@@ -60,11 +60,18 @@ _html_variant_links() {
     echo "$out"
 }
 
+# S_CANCELLED: a holiday-cancelled occurrence's style -- bold warning red,
+# distinct from S_PENDING-style grey (an unreleased-but-coming item) and
+# any assessment-callout color a course's own styling might add on top.
+_S_CANCELLED='font-weight:600;color:#c0392b;'
+
 # render_kind_cell_html -- same signature/semantics as render-markdown.sh's
-# render_kind_cell, HTML output.
+# render_kind_cell (see that function's header comment for the
+# holiday-cancellation behavior), HTML output.
 render_kind_cell_html() {
     local week="$1" kind_id="$2" occurrences_file="$3" titles_file="$4"
     local allowlist_file="$5" labels_file="$6" base_url="$7"
+    local holidays_file="$8" emoji_file="$9"
     local rows
     rows=$(awk -F'|' -v k="$kind_id" '$1==k' "$occurrences_file")
     if [ -z "$rows" ]; then
@@ -80,6 +87,14 @@ render_kind_cell_html() {
     local cell_html="" line
     while IFS='|' read -r rkind rlabel rslot rdate rweekday rsuffix rvariants; do
         [ -z "$rkind" ] && continue
+        local holiday_name
+        holiday_name="$(is_holiday "$rdate" "$holidays_file")" && {
+            local emoji prefix=""
+            emoji="$(holiday_emoji "$holiday_name" "$emoji_file")"
+            [ -n "$emoji" ] && prefix="${emoji} "
+            cell_html="${cell_html}<div style=\"${_S_CANCELLED}\">No $(echo "$rlabel" | _html_escape) (${prefix}$(echo "$holiday_name" | _html_escape))</div>"
+            continue
+        }
         local title released links
         title="$(slot_title "$rslot" "$titles_file")"
         title="$(compose_slot_title "$rslot" "$title")"
@@ -95,7 +110,7 @@ render_kind_cell_html() {
 render_html_calendar() {
     local kinds_conf="$1" start_monday="$2" num_weeks="$3" recess_after="$4"
     local titles_file="$5" allowlist_file="$6" labels_file="$7" notes_file="$8"
-    local base_url="$9"
+    local base_url="$9" holidays_file="${10}" emoji_file="${11}"
 
     local -a kind_ids
     while IFS= read -r k; do kind_ids+=("$k"); done < <(session_kind_ids "$kinds_conf")
@@ -121,7 +136,7 @@ render_html_calendar() {
         week_occurrences "$kinds_conf" "$monday" "$teaching_week" > "$occ_file"
         for k in "${kind_ids[@]}"; do
             local cell
-            cell="$(render_kind_cell_html "$teaching_week" "$k" "$occ_file" "$titles_file" "$allowlist_file" "$labels_file" "$base_url")"
+            cell="$(render_kind_cell_html "$teaching_week" "$k" "$occ_file" "$titles_file" "$allowlist_file" "$labels_file" "$base_url" "$holidays_file" "$emoji_file")"
             printf '<td style="%s">%s</td>' "$td_style" "$cell"
         done
         local note

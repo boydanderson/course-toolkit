@@ -87,6 +87,46 @@ week_note() {
         lines+=("$line")
     done < <(grep -vE '^\s*#|^\s*$' "$notes_file" | grep "^${week}|" | cut -d'|' -f2-)
     [ ${#lines[@]} -eq 0 ] && return 0
-    local IFS='; '
-    echo "${lines[*]}"
+    # $IFS-based joining (${lines[*]} with IFS='; ') only uses IFS's
+    # first character, not the whole separator string -- confirmed for
+    # real (silently drops the space, joining "a;b" not "a; b"). Same
+    # trap already hit and fixed in render-markdown.sh; an explicit loop
+    # avoids it here too.
+    local out="${lines[0]}" i
+    for ((i = 1; i < ${#lines[@]}; i++)); do
+        out="${out}; ${lines[$i]}"
+    done
+    echo "$out"
+}
+
+# is_holiday DATE HOLIDAYS_FILE -> the holiday's name (success/0) if
+# DATE is listed, empty + failure (1) otherwise. Format: DATE|NAME
+# (YYYY-MM-DD), one per line -- a course supplies this itself (fetching
+# a real institution's public-holiday calendar is out of scope for a
+# generic toolkit; it's just data here).
+is_holiday() {
+    local date="$1" holidays_file="$2" name
+    [ -f "$holidays_file" ] || return 1
+    name=$(grep -vE '^\s*#|^\s*$' "$holidays_file" | grep "^${date}|" | head -1 | cut -d'|' -f2- || true)
+    [ -z "$name" ] && return 1
+    echo "$name"
+}
+
+# holiday_emoji NAME EMOJI_FILE -> one emoji for this holiday, empty if
+# none mapped. Format: HOLIDAY_NAME|EMOJI. Strips a trailing
+# "(Observed)"/"(observed)" and normalizes a curly apostrophe to
+# straight before matching, since a real public-holiday feed can be
+# inconsistent about both across years (confirmed for real against
+# data.gov.sg's -- both "New Year's Day" and "New Year’s Day" appear) --
+# the observed version of a holiday shares its base holiday's emoji.
+holiday_emoji() {
+    local name="$1" emoji_file="$2"
+    [ -f "$emoji_file" ] || return 0
+    local base
+    base=$(printf '%s' "$name" | sed -E 's/ \([Oo]bserved\)$//' | sed "s/’/'/g")
+    awk -F'|' -v n="$base" '
+        /^[[:space:]]*#/ { next }
+        /^[[:space:]]*$/ { next }
+        $1==n { print $2; exit }
+    ' "$emoji_file"
 }

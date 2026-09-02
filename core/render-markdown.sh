@@ -6,9 +6,9 @@
 #
 # Depends on: schedule-lib.sh (week_occurrences, session_kind_ids),
 # semester-lib.sh (semester_weeks), enrich-lib.sh (is_slot_released,
-# slot_title, slot_kind_label, week_note). Caller sources all of these
-# (or this file, which sources its own deps) before calling
-# render_markdown_calendar.
+# slot_title, slot_kind_label, week_note, is_holiday, holiday_emoji).
+# Caller sources all of these (or this file, which sources its own
+# deps) before calling render_markdown_calendar.
 
 RENDER_MD_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$RENDER_MD_DIR/schedule-lib.sh"
@@ -51,14 +51,20 @@ _md_variant_links() {
 }
 
 # render_kind_cell WEEK KIND_ID OCCURRENCES_FILE TITLES_FILE ALLOWLIST_FILE
-# LABELS_FILE PDF_BASE_URL -> this week's cell text for one kind column,
-# "-" if nothing scheduled and no override label. OCCURRENCES_FILE holds
-# this week's full week_occurrences() output (computed once per week by
-# the caller, filtered here by KIND_ID) -- multiple occurrences of the
-# same kind (e.g. two lectures/week) are joined with "<br>".
+# LABELS_FILE PDF_BASE_URL HOLIDAYS_FILE EMOJI_FILE -> this week's cell
+# text for one kind column, "-" if nothing scheduled and no override
+# label. OCCURRENCES_FILE holds this week's full week_occurrences()
+# output (computed once per week by the caller, filtered here by
+# KIND_ID) -- multiple occurrences of the same kind (e.g. two lectures/
+# week) are joined with "<br>". An occurrence whose real date
+# (OCCURRENCES_FILE's own date column) falls on a HOLIDAYS_FILE entry
+# renders as "No <label> (<emoji> <holiday>)" instead of its usual
+# title+links -- this overrides even an authored/released slot, since
+# the session didn't happen regardless of whether content exists for it.
 render_kind_cell() {
     local week="$1" kind_id="$2" occurrences_file="$3" titles_file="$4"
     local allowlist_file="$5" labels_file="$6" base_url="$7"
+    local holidays_file="$8" emoji_file="$9"
     local rows
     rows=$(awk -F'|' -v k="$kind_id" '$1==k' "$occurrences_file")
     if [ -z "$rows" ]; then
@@ -70,6 +76,14 @@ render_kind_cell() {
     local cell_parts=() line
     while IFS='|' read -r rkind rlabel rslot rdate rweekday rsuffix rvariants; do
         [ -z "$rkind" ] && continue
+        local holiday_name
+        holiday_name="$(is_holiday "$rdate" "$holidays_file")" && {
+            local emoji prefix=""
+            emoji="$(holiday_emoji "$holiday_name" "$emoji_file")"
+            [ -n "$emoji" ] && prefix="${emoji} "
+            cell_parts+=("No ${rlabel} (${prefix}${holiday_name})")
+            continue
+        }
         local title released links
         title="$(slot_title "$rslot" "$titles_file")"
         title="$(compose_slot_title "$rslot" "$title")"
@@ -94,13 +108,16 @@ render_kind_cell() {
 
 # render_markdown_calendar SESSION_KINDS_CONF START_MONDAY NUM_WEEKS
 # RECESS_AFTER_WEEK TITLES_FILE ALLOWLIST_FILE LABELS_FILE NOTES_FILE
-# PDF_BASE_URL -> a full markdown table, one row per teaching week, one
-# column per distinct kind (in session-kinds.conf's first-appearance
-# order) plus a trailing Notes column.
+# PDF_BASE_URL HOLIDAYS_FILE EMOJI_FILE -> a full markdown table, one row
+# per teaching week, one column per distinct kind (in
+# session-kinds.conf's first-appearance order) plus a trailing Notes
+# column. HOLIDAYS_FILE/EMOJI_FILE are optional -- pass "/dev/null" (or
+# any nonexistent path) for either to disable holiday-cancellation
+# rendering entirely.
 render_markdown_calendar() {
     local kinds_conf="$1" start_monday="$2" num_weeks="$3" recess_after="$4"
     local titles_file="$5" allowlist_file="$6" labels_file="$7" notes_file="$8"
-    local base_url="$9"
+    local base_url="$9" holidays_file="${10}" emoji_file="${11}"
 
     local -a kind_ids
     while IFS= read -r k; do kind_ids+=("$k"); done < <(session_kind_ids "$kinds_conf")
@@ -124,7 +141,7 @@ render_markdown_calendar() {
         local row="| $teaching_week |"
         for k in "${kind_ids[@]}"; do
             local cell
-            cell="$(render_kind_cell "$teaching_week" "$k" "$occ_file" "$titles_file" "$allowlist_file" "$labels_file" "$base_url")"
+            cell="$(render_kind_cell "$teaching_week" "$k" "$occ_file" "$titles_file" "$allowlist_file" "$labels_file" "$base_url" "$holidays_file" "$emoji_file")"
             row="${row} ${cell} |"
         done
         local note
