@@ -31,7 +31,12 @@ is_slot_released() {
 slot_title() {
     local slot_id="$1" titles_file="$2"
     [ -f "$titles_file" ] || return 0
-    grep -vE '^\s*#|^\s*$' "$titles_file" | grep "^${slot_id}|" | head -1 | cut -d'|' -f2-
+    # || true: a scheduled occurrence with nothing in TITLES_FILE yet
+    # (e.g. no content-map entry at all) is a normal "nothing to show",
+    # not something that should abort a caller running under set -e via
+    # grep's "no match" exit status propagating out of a plain command
+    # substitution.
+    grep -vE '^\s*#|^\s*$' "$titles_file" | grep "^${slot_id}|" | head -1 | cut -d'|' -f2- || true
 }
 
 # compose_slot_title SLOT_ID TITLE -> "SLOT_ID: TITLE", or just SLOT_ID
