@@ -15,13 +15,30 @@ test_render_markdown() {
     out="$(render_markdown_calendar "$kinds" 2026-08-10 4 0 "$titles" "$allowlist" \
         /dev/null /dev/null https://example.org/pdfs /dev/null /dev/null)"
 
-    assert_contains "header row lists both kinds once" "$out" "| Week | Lecture |"
+    assert_contains "a kind with 2 weekly occurrences splits into 2 real-weekday columns" \
+        "$out" "| Week | Wednesday (Lecture A) | Friday (Lecture B) | Notes |"
     assert_contains "released slot with a title gets a real markdown link" \
         "$out" "[View](https://example.org/pdfs/lecture-L4A.view.pdf)"
     assert_contains "unreleased slot shows plain text, not a link" "$out" "L4B (View"
     assert_not_contains "unreleased slot has no markdown link syntax for itself" \
         "$(echo "$out" | grep '| 4 |')" "[View](https://example.org/pdfs/lecture-L4B"
-    assert_contains "two occurrences in one week join with <br>" "$out" "<br>"
+
+    # <br>-joining inside one cell is still real, tested code: it fires
+    # whenever render_kind_cell's own occurrences_file has >1 row for the
+    # given kind_id -- always true for a merged (no SUFFIX_FILTER) call,
+    # which is what a single-occurrence-per-week kind (or a direct
+    # render_kind_cell caller) still gets. render_markdown_calendar
+    # itself no longer reaches this for a *declared* multi-occurrence
+    # kind (those now split into columns above), so exercise it directly.
+    local br_occ="$scratch/br-occurrences.tsv"
+    cat > "$br_occ" <<'EOF'
+lecture|Lecture|L4A|2026-09-02|wed|A|view,print
+lecture|Lecture|L4B|2026-09-04|fri|B|view,print
+EOF
+    local br_cell
+    br_cell="$(render_kind_cell 4 lecture "$br_occ" "$titles" "$allowlist" /dev/null https://example.org/pdfs /dev/null /dev/null)"
+    assert_contains "render_kind_cell (no suffix filter) still joins multiple rows with <br>" \
+        "$br_cell" "<br>"
 
     # release-gate + label-override + holiday-cancellation, together
     local holidays="$scratch/holidays.conf" emoji="$scratch/emoji.conf" labels="$scratch/labels.conf"

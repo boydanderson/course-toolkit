@@ -154,37 +154,45 @@ _occasion_links_html() {
 
 # render_kind_cell_html -- same signature/semantics as render-markdown.sh's
 # render_kind_cell (see that function's header comment for the
-# holiday-cancellation behavior), HTML output. PALETTE (10th, optional)
-# is _calendar_palette's opaque string; see that function's comment.
-# EXTRA_LINK_LABEL (11th, optional -- e.g. "Recording") and
-# EXTRA_LINK_FILE (12th, a SLOT_ID|URL file) add a second, independently
-# gated link to every occurrence in this kind's cell -- see
-# _html_variant_links' own comment. Leave EXTRA_LINK_LABEL empty (the
-# default) for a kind that doesn't have one. OCCASION_LINKS_FILE (13th,
-# optional) is occasion_links' own WEEK|KIND_ID|... file -- an occasion
-# label (slot_kind_label) is now checked UNCONDITIONALLY, not just when
-# this kind has zero occurrences this week (a real gap: a kind with
-# several occurrences, like two lectures/week, couldn't previously flag
-# that just ONE of them was replaced by e.g. an assessment -- the
-# excluded occurrence simply vanished with no explanation). The label
-# (with its links, if OCCASION_LINKS_FILE has any for this week+kind) is
-# now prepended to whatever real occurrences also rendered, rather than
-# being a total-replacement fallback only reached when rows is empty.
+# holiday-cancellation and SUFFIX_FILTER behavior), HTML output. PALETTE
+# (10th, optional) is _calendar_palette's opaque string; see that
+# function's comment. EXTRA_LINK_LABEL (11th, optional -- e.g.
+# "Recording") and EXTRA_LINK_FILE (12th, a SLOT_ID|URL file) add a
+# second, independently gated link to every occurrence in this kind's
+# cell -- see _html_variant_links' own comment. Leave EXTRA_LINK_LABEL
+# empty (the default) for a kind that doesn't have one.
+# OCCASION_LINKS_FILE (13th, optional) is occasion_links' own
+# WEEK|KIND_ID|... file. SUFFIX_FILTER (14th, optional) restricts rows
+# to just that one weekly occurrence, for a kind split into one column
+# per suffix (see render_html_calendar) -- with no filter (the merged-
+# column case), an occasion label (slot_kind_label) is checked
+# UNCONDITIONALLY, not just when this kind has zero occurrences this
+# week (a real gap: a kind with several occurrences, like two lectures/
+# week, couldn't previously flag that just ONE of them was replaced by
+# e.g. an assessment -- the excluded occurrence simply vanished with no
+# explanation), and the label is prepended to whatever real occurrences
+# also rendered. With a filter (the split-column case), each column
+# represents exactly one occurrence, so "only when nothing scheduled at
+# this specific slot" is both sufficient and correct.
 render_kind_cell_html() {
     local week="$1" kind_id="$2" occurrences_file="$3" titles_file="$4"
     local allowlist_file="$5" labels_file="$6" base_url="$7"
     local holidays_file="$8" emoji_file="$9"
     local palette="${10:-}"
     local extra_link_label="${11:-}" extra_link_file="${12:-}"
-    local occasion_links_file="${13:-}"
+    local occasion_links_file="${13:-}" suffix_filter="${14:-}"
     _calendar_palette "$palette"
     local rows
-    rows=$(awk -F'|' -v k="$kind_id" '$1==k' "$occurrences_file")
+    if [ -n "$suffix_filter" ]; then
+        rows=$(awk -F'|' -v k="$kind_id" -v s="$suffix_filter" '$1==k && $6==s' "$occurrences_file")
+    else
+        rows=$(awk -F'|' -v k="$kind_id" '$1==k' "$occurrences_file")
+    fi
 
     local cell_html=""
     local occ_label
     occ_label="$(slot_kind_label "$week" "$kind_id" "$labels_file")"
-    if [ -n "$occ_label" ]; then
+    if [ -n "$occ_label" ] && { [ -z "$suffix_filter" ] || [ -z "$rows" ]; }; then
         cell_html="<div style=\"font-weight:600;\">$(echo "$occ_label" | _html_escape)</div>"
         local occ_raw occ_links_html
         occ_raw="$(occasion_links "$week" "$kind_id" "$occasion_links_file")"
@@ -249,8 +257,13 @@ render_html_calendar() {
     [ -z "$today" ] && today="$(sgt_date '+%Y-%m-%d')"
     _calendar_palette "$palette"
 
-    local -a kind_ids
-    while IFS= read -r k; do kind_ids+=("$k"); done < <(session_kind_ids "$kinds_conf")
+    local -a col_kind col_suffix col_header
+    local ck cs ch
+    while IFS='|' read -r ck cs ch; do
+        col_kind+=("$ck")
+        col_suffix+=("$cs")
+        col_header+=("$ch")
+    done < <(kind_columns "$kinds_conf")
 
     local th_style="border:1px solid ${CAL_BORDER};padding:6px 8px;background:${CAL_HEADER_BG};text-align:left;"
     local td_style="border:1px solid ${CAL_BORDER};padding:6px 8px;vertical-align:top;"
@@ -258,9 +271,9 @@ render_html_calendar() {
     echo '<table style="border-collapse:collapse;width:100%;font-size:0.9rem;">'
     echo '<thead><tr>'
     printf '<th style="%s">Week</th>' "$th_style"
-    local k
-    for k in "${kind_ids[@]}"; do
-        printf "<th style=\"%s\">%s</th>" "$th_style" "$(_capitalize "$k")"
+    local i
+    for ((i = 0; i < ${#col_kind[@]}; i++)); do
+        printf "<th style=\"%s\">%s</th>" "$th_style" "$(echo "${col_header[$i]}" | _html_escape)"
     done
     printf '<th style="%s">Notes</th>' "$th_style"
     echo '</tr></thead><tbody>'
@@ -297,10 +310,11 @@ render_html_calendar() {
         echo '<tr>'
         printf '<td style="%s">%s</td>' "$week_style" "$teaching_week"
         week_occurrences "$kinds_conf" "$monday" "$teaching_week" > "$occ_file"
-        for k in "${kind_ids[@]}"; do
+        for ((i = 0; i < ${#col_kind[@]}; i++)); do
+            local k="${col_kind[$i]}" s="${col_suffix[$i]}"
             local cell extra_label=""
             [ -n "$kind_extra_links_file" ] && extra_label="$(kind_extra_link_label "$k" "$kind_extra_links_file")"
-            cell="$(render_kind_cell_html "$teaching_week" "$k" "$occ_file" "$titles_file" "$allowlist_file" "$labels_file" "$base_url" "$holidays_file" "$emoji_file" "$palette" "$extra_label" "$extra_links_file" "$occasion_links_file")"
+            cell="$(render_kind_cell_html "$teaching_week" "$k" "$occ_file" "$titles_file" "$allowlist_file" "$labels_file" "$base_url" "$holidays_file" "$emoji_file" "$palette" "$extra_label" "$extra_links_file" "$occasion_links_file" "$s")"
             printf '<td style="%s">%s</td>' "$row_style" "$cell"
         done
         local note

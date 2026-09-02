@@ -96,36 +96,51 @@ _occasion_links_markdown() {
 
 # render_kind_cell WEEK KIND_ID OCCURRENCES_FILE TITLES_FILE ALLOWLIST_FILE
 # LABELS_FILE PDF_BASE_URL HOLIDAYS_FILE EMOJI_FILE [EXTRA_LINK_LABEL]
-# [EXTRA_LINK_FILE] [OCCASION_LINKS_FILE] -> this week's cell text for
-# one kind column, "-" if nothing scheduled and no override label.
-# OCCURRENCES_FILE holds this week's full week_occurrences() output
-# (computed once per week by the caller, filtered here by KIND_ID) --
-# multiple occurrences of the same kind (e.g. two lectures/week) are
-# joined with "<br>". An occurrence whose real date (OCCURRENCES_FILE's
-# own date column) falls on a HOLIDAYS_FILE entry renders as "No <label>
-# (<emoji> <holiday>)" instead of its usual title+links -- this
-# overrides even an authored/released slot, since the session didn't
-# happen regardless of whether content exists for it. EXTRA_LINK_LABEL/
-# _FILE (both optional -- e.g. "Recording"/a SLOT_ID|URL file) add a
-# second, independently-gated link to every occurrence -- see
-# _md_variant_links' own comment. An occasion label (slot_kind_label) is
-# checked UNCONDITIONALLY, not just when this kind has zero occurrences
-# this week -- see render-html.sh's render_kind_cell_html for the full
-# rationale (the same fix, mirrored here) -- and OCCASION_LINKS_FILE
-# (optional) gives it up to 2 links.
+# [EXTRA_LINK_FILE] [OCCASION_LINKS_FILE] [SUFFIX_FILTER] -> this week's
+# cell text for one kind column, "-" if nothing scheduled and no
+# override label. OCCURRENCES_FILE holds this week's full
+# week_occurrences() output (computed once per week by the caller,
+# filtered here by KIND_ID) -- multiple occurrences of the same kind
+# (e.g. two lectures/week) are joined with "<br>". An occurrence whose
+# real date (OCCURRENCES_FILE's own date column) falls on a
+# HOLIDAYS_FILE entry renders as "No <label> (<emoji> <holiday>)"
+# instead of its usual title+links -- this overrides even an authored/
+# released slot, since the session didn't happen regardless of whether
+# content exists for it. EXTRA_LINK_LABEL/_FILE (both optional -- e.g.
+# "Recording"/a SLOT_ID|URL file) add a second, independently-gated link
+# to every occurrence -- see _md_variant_links' own comment.
+#
+# SUFFIX_FILTER (optional) restricts rows to just that one weekly
+# occurrence -- for a kind split into one column per suffix (see
+# render_markdown_calendar) rather than one merged column. It also
+# changes the occasion-label behavior: with no filter (the merged-
+# column case), an occasion label (slot_kind_label) is checked
+# UNCONDITIONALLY, not just when this kind has zero occurrences this
+# week -- see render-html.sh's render_kind_cell_html for the full
+# rationale (the same fix, mirrored here). With a filter (the
+# split-column case), each column represents exactly one occurrence, so
+# the simpler "only when nothing scheduled at this specific slot" rule
+# is both sufficient and correct -- the unconditional check exists only
+# to handle a merged cell where a sibling occurrence's presence would
+# otherwise hide the label. OCCASION_LINKS_FILE (optional) gives the
+# label up to 2 links either way.
 render_kind_cell() {
     local week="$1" kind_id="$2" occurrences_file="$3" titles_file="$4"
     local allowlist_file="$5" labels_file="$6" base_url="$7"
     local holidays_file="$8" emoji_file="$9"
     local extra_link_label="${10:-}" extra_link_file="${11:-}"
-    local occasion_links_file="${12:-}"
+    local occasion_links_file="${12:-}" suffix_filter="${13:-}"
     local rows
-    rows=$(awk -F'|' -v k="$kind_id" '$1==k' "$occurrences_file")
+    if [ -n "$suffix_filter" ]; then
+        rows=$(awk -F'|' -v k="$kind_id" -v s="$suffix_filter" '$1==k && $6==s' "$occurrences_file")
+    else
+        rows=$(awk -F'|' -v k="$kind_id" '$1==k' "$occurrences_file")
+    fi
 
     local cell_parts=()
     local occ_label
     occ_label="$(slot_kind_label "$week" "$kind_id" "$labels_file")"
-    if [ -n "$occ_label" ]; then
+    if [ -n "$occ_label" ] && { [ -z "$suffix_filter" ] || [ -z "$rows" ]; }; then
         local occ_raw occ_links_md occ_part="$occ_label"
         occ_raw="$(occasion_links "$week" "$kind_id" "$occasion_links_file")"
         if [ -n "$occ_raw" ]; then
@@ -181,13 +196,15 @@ render_kind_cell() {
 # PDF_BASE_URL HOLIDAYS_FILE EMOJI_FILE [KIND_EXTRA_LINKS_FILE]
 # [EXTRA_LINKS_FILE] -> a full markdown table, one row per teaching
 # week, one column per distinct kind (in session-kinds.conf's
-# first-appearance order) plus a trailing Notes column.
-# HOLIDAYS_FILE/EMOJI_FILE are optional -- pass "/dev/null" (or any
-# nonexistent path) for either to disable holiday-cancellation rendering
-# entirely. KIND_EXTRA_LINKS_FILE (a KIND_ID|LABEL file) and
-# EXTRA_LINKS_FILE (a SLOT_ID|URL file) are both optional -- see
-# render_kind_cell's own comment; a course that doesn't want a second
-# link per occurrence for any kind just never creates
+# first-appearance order -- split into one column per occurrence for a
+# kind with more than one/week, see schedule-lib.sh's kind_columns) plus
+# a trailing
+# Notes column. HOLIDAYS_FILE/EMOJI_FILE are optional -- pass
+# "/dev/null" (or any nonexistent path) for either to disable holiday-
+# cancellation rendering entirely. KIND_EXTRA_LINKS_FILE (a
+# KIND_ID|LABEL file) and EXTRA_LINKS_FILE (a SLOT_ID|URL file) are both
+# optional -- see render_kind_cell's own comment; a course that doesn't
+# want a second link per occurrence for any kind just never creates
 # KIND_EXTRA_LINKS_FILE. OCCASION_LINKS_FILE (optional) is
 # occasion_links' own WEEK|KIND_ID|... file, giving an occasion label up
 # to 2 optional links -- see render_kind_cell's comment.
@@ -198,14 +215,19 @@ render_markdown_calendar() {
     local kind_extra_links_file="${12:-}" extra_links_file="${13:-}"
     local occasion_links_file="${14:-}"
 
-    local -a kind_ids
-    while IFS= read -r k; do kind_ids+=("$k"); done < <(session_kind_ids "$kinds_conf")
+    local -a col_kind col_suffix col_header
+    local ck cs ch
+    while IFS='|' read -r ck cs ch; do
+        col_kind+=("$ck")
+        col_suffix+=("$cs")
+        col_header+=("$ch")
+    done < <(kind_columns "$kinds_conf")
 
     local header="| Week |"
     local sep="|------|"
-    local k
-    for k in "${kind_ids[@]}"; do
-        header="${header} $(_capitalize "$k") |"
+    local i
+    for ((i = 0; i < ${#col_kind[@]}; i++)); do
+        header="${header} ${col_header[$i]} |"
         sep="${sep}------|"
     done
     header="${header} Notes |"
@@ -218,10 +240,11 @@ render_markdown_calendar() {
     while IFS='|' read -r teaching_week monday; do
         week_occurrences "$kinds_conf" "$monday" "$teaching_week" > "$occ_file"
         local row="| $teaching_week |"
-        for k in "${kind_ids[@]}"; do
+        for ((i = 0; i < ${#col_kind[@]}; i++)); do
+            local k="${col_kind[$i]}" s="${col_suffix[$i]}"
             local cell extra_label=""
             [ -n "$kind_extra_links_file" ] && extra_label="$(kind_extra_link_label "$k" "$kind_extra_links_file")"
-            cell="$(render_kind_cell "$teaching_week" "$k" "$occ_file" "$titles_file" "$allowlist_file" "$labels_file" "$base_url" "$holidays_file" "$emoji_file" "$extra_label" "$extra_links_file" "$occasion_links_file")"
+            cell="$(render_kind_cell "$teaching_week" "$k" "$occ_file" "$titles_file" "$allowlist_file" "$labels_file" "$base_url" "$holidays_file" "$emoji_file" "$extra_label" "$extra_links_file" "$occasion_links_file" "$s")"
             row="${row} ${cell} |"
         done
         local note

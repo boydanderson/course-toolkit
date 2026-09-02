@@ -196,6 +196,89 @@ week_occurrences() {
     done < <(grep -vE '^\s*#|^\s*$' "$conf_file")
 }
 
+# weekday_full_name NAME -> "Monday".."Sunday", or empty + nonzero exit
+# if NAME isn't recognized. Companion to weekday_offset, for a column
+# header that names the actual day (e.g. "Wednesday (Lecture A)").
+weekday_full_name() {
+    local lower
+    lower="$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')"
+    case "$lower" in
+        mon) echo "Monday" ;;
+        tue) echo "Tuesday" ;;
+        wed) echo "Wednesday" ;;
+        thu) echo "Thursday" ;;
+        fri) echo "Friday" ;;
+        sat) echo "Saturday" ;;
+        sun) echo "Sunday" ;;
+        *) return 1 ;;
+    esac
+}
+
+# kind_suffixes CONF_FILE KIND_ID -> one line per distinct SUFFIX
+# declared for KIND_ID, in file order: "SUFFIX|WEEKDAY|LABEL". A kind
+# with a single weekly occurrence has exactly one row (SUFFIX "-"); a
+# kind with several (e.g. two lectures/week) has one row per occurrence
+# -- for a renderer deciding whether a kind needs one merged column or
+# one column per occurrence (see render-markdown.sh/render-html.sh).
+kind_suffixes() {
+    local conf_file="$1" kind_id="$2"
+    local k l w s sp v ws we ew
+    local seen=""
+    while IFS='|' read -r k l w s sp v ws we ew; do
+        [ -z "$k" ] && continue
+        case "$k" in \#*) continue ;; esac
+        [ "$k" = "$kind_id" ] || continue
+        case ",${seen}," in *",${s},"*) continue ;; esac
+        seen="${seen:+$seen,}$s"
+        printf '%s|%s|%s\n' "$s" "$w" "$l"
+    done < <(grep -vE '^\s*#|^\s*$' "$conf_file")
+}
+
+# _capitalize WORD -> WORD with its first character upper-cased (e.g.
+# "lecture" -> "Lecture", "view" -> "View"), for column headers/variant
+# labels. Portable `tr`/`cut`, not bash 4+'s ${var^} -- macOS ships bash
+# 3.2 as /bin/bash, which doesn't support it (see weekday_offset above
+# for the same fix, confirmed for real). Lives here (not enrich-lib.sh,
+# where it used to live) since kind_columns below needs it and
+# schedule-lib.sh shouldn't depend on enrich-lib.sh to get it --
+# enrich-lib.sh now sources this file instead, so its own callers still
+# get _capitalize from there unchanged.
+_capitalize() {
+    local w="$1"
+    printf '%s%s' "$(printf '%s' "${w:0:1}" | tr '[:lower:]' '[:upper:]')" "${w:1}"
+}
+
+# kind_columns CONF_FILE -> one line per output column, shared by both
+# render-markdown.sh and render-html.sh: "KIND_ID|SUFFIX_FILTER|HEADER".
+# A kind with a single weekly occurrence (kind_suffixes returns exactly
+# one row) gets one merged column (SUFFIX_FILTER empty, HEADER the
+# capitalized kind id -- exactly the pre-split-column behavior); a kind
+# with several (e.g. two lectures/week) gets one column per occurrence
+# instead, since cramming e.g. two weekly sessions into one cell loses
+# which weekday each one is on -- HEADER then follows cs1101s/course-
+# materials' own real convention, "Wednesday (Lecture A)"
+# (WeekdayFullName (Label Suffix)).
+kind_columns() {
+    local conf_file="$1"
+    local -a kind_ids
+    while IFS= read -r k; do kind_ids+=("$k"); done < <(session_kind_ids "$conf_file")
+    local k
+    for k in "${kind_ids[@]}"; do
+        local -a suf_lines=()
+        while IFS= read -r line; do [ -n "$line" ] && suf_lines+=("$line"); done < <(kind_suffixes "$conf_file" "$k")
+        if [ "${#suf_lines[@]}" -le 1 ]; then
+            printf '%s||%s\n' "$k" "$(_capitalize "$k")"
+        else
+            local sl suf wd lbl wd_full
+            for sl in "${suf_lines[@]}"; do
+                IFS='|' read -r suf wd lbl <<< "$sl"
+                wd_full="$(weekday_full_name "$wd")"
+                printf '%s|%s|%s (%s %s)\n' "$k" "$suf" "$wd_full" "$lbl" "$suf"
+            done
+        fi
+    done
+}
+
 # session_kind_ids CONF_FILE -> the distinct KIND_IDs declared, in
 # first-appearance order (e.g. for generating one table column per kind
 # in Stage 2's calendar/Canvas generators).

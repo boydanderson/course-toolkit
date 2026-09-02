@@ -82,7 +82,9 @@ EOF
         /dev/null /dev/null https://example.org/pdfs /dev/null /dev/null)"
     local th_count
     th_count="$(echo "$out" | grep -o '<th style=' | wc -l | tr -d ' ')"
-    assert_eq "header has exactly Week + Lecture + Notes = 3 <th>s (kind not doubled per occurrence)" "3" "$th_count"
+    assert_eq "a kind with 2 weekly occurrences splits into 2 columns: Week + 2 x Lecture + Notes = 4 <th>s" "4" "$th_count"
+    assert_contains "split columns are headered with the real weekday, like cs1101s' own convention" \
+        "$out" "<th style=\"border:1px solid #dddddd;padding:6px 8px;background:#eeeeee;text-align:left;\">Wednesday (Lecture A)</th>"
     assert_contains "unreleased slot renders as a grey <span>, not a link" "$out" "<span style=\"color:#888888;\">View</span>"
     assert_not_contains "unreleased slot has no <a> for itself" \
         "$out" 'href="https://example.org/pdfs/lecture-L1B'

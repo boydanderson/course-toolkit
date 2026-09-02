@@ -13,6 +13,36 @@ test_schedule_lib() {
     assert_eq "format_slot_id with suffix" "L4A" "$(format_slot_id 'L{n}{suffix}' 4 A)"
     assert_eq "format_slot_id with '-' suffix drops it" "R7" "$(format_slot_id 'R{n}' 7 -)"
 
+    # weekday_full_name
+    assert_eq "weekday_full_name mon" "Monday" "$(weekday_full_name mon)"
+    assert_eq "weekday_full_name is case-insensitive" "Wednesday" "$(weekday_full_name WED)"
+    assert_failure "weekday_full_name rejects garbage" weekday_full_name notaday
+
+    # _capitalize
+    assert_eq "_capitalize lowercases-then-caps first letter only" "Lecture" "$(_capitalize lecture)"
+
+    # kind_suffixes / kind_columns
+    local ks_conf
+    ks_conf="$(mktemp)"
+    {
+        printf 'lecture|Lecture|wed|A|L{n}{suffix}|view,print|1|13|-\n'
+        printf 'lecture|Lecture|fri|B|L{n}{suffix}|view,print|1|13|-\n'
+        printf 'quiz|Quiz|sat|-|Quiz{n}|view|5|9|-\n'
+    } > "$ks_conf"
+    out="$(kind_suffixes "$ks_conf" lecture)"
+    assert_eq "kind_suffixes: lecture has 2 rows, in file order" \
+        "A|wed|Lecture
+B|fri|Lecture" "$out"
+    out="$(kind_suffixes "$ks_conf" quiz)"
+    assert_eq "kind_suffixes: a single-occurrence kind has exactly one row" "-|sat|Quiz" "$out"
+
+    out="$(kind_columns "$ks_conf")"
+    assert_eq "kind_columns: a multi-occurrence kind splits, a single one doesn't" \
+        "lecture|A|Wednesday (Lecture A)
+lecture|B|Friday (Lecture B)
+quiz||Quiz" "$out"
+    rm -f "$ks_conf"
+
     # occurrence_date
     assert_eq "occurrence_date mon = week_monday" "2026-08-10" "$(occurrence_date 2026-08-10 mon)"
     assert_eq "occurrence_date fri = +4 days" "2026-08-14" "$(occurrence_date 2026-08-10 fri)"
