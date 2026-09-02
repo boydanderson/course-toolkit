@@ -54,7 +54,7 @@ for every renderer-specific step.
   | `LABEL` | display name, e.g. "Lecture" |
   | `WEEKDAY` | `mon`\|`tue`\|`wed`\|`thu`\|`fri`\|`sat`\|`sun` |
   | `SUFFIX` | distinguishes same-kind occurrences in one week (`A`/`B` for two lectures); `-` if there's only one |
-  | `SLOT_PATTERN` | templated public ID: `{n}` → teaching week number, `{suffix}` → `SUFFIX` (empty if `-`), e.g. `L{n}{suffix}` → `L4A` |
+  | `SLOT_PATTERN` | templated public ID: `{n}` → teaching week number, `{suffix}` → `SUFFIX` (empty if `-`), e.g. `L{n}{suffix}` → `L4A`. A third placeholder, `{count}`, is a flat 1-based counter across every active occurrence of this `KIND_ID` so far (merged across all its rows, in week/row order) instead of a week-derived number — e.g. `Lab{count}` numbers 2-a-week labs `Lab1..LabN` straight through rather than `Lab1A`/`Lab1B`/`Lab2A`...; a row skipped via `EXCLUDE_WEEKS` doesn't consume a count, so the sequence stays gap-free |
   | `VARIANTS` | comma-separated build-artifact variants, e.g. `view,print`, `problem,solution`, or `none` for one undifferentiated PDF |
   | `WEEK_START`, `WEEK_END` | inclusive teaching-week bounds this occurrence is active for |
   | `EXCLUDE_WEEKS` | optional (omit, or `-`): comma-separated week numbers to skip within that range, e.g. `4,6,10,12` for assessment-displaced weeks |

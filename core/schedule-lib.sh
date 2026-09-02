@@ -39,7 +39,18 @@
 #                 kind only occurs once a week
 #   SLOT_PATTERN  templated public slot ID: {n} -> teaching week number,
 #                 {suffix} -> SUFFIX (empty string if SUFFIX is "-"), e.g.
-#                 "L{n}{suffix}" -> "L4A", "R{n}" -> "R7"
+#                 "L{n}{suffix}" -> "L4A", "R{n}" -> "R7". A third
+#                 placeholder, {count}, is a flat 1-based counter across
+#                 every active occurrence of this KIND_ID so far (in
+#                 (week, file-row-order) sequence, merged across all rows
+#                 sharing the KIND_ID) rather than a week-derived number
+#                 -- for a kind whose real-world numbering doesn't reset
+#                 or split per week (e.g. 17 labs run 2/week on different
+#                 weekdays, numbered Lab1..Lab17 straight through, not
+#                 Lab1A/Lab1B/Lab2A...). A week where this row is skipped
+#                 (via EXCLUDE_WEEKS -- e.g. a tutorial taking over that
+#                 week's slot) simply doesn't consume a count, so the
+#                 remaining occurrences stay a dense, gap-free sequence.
 #   VARIANTS      comma-separated build-artifact variants this kind
 #                 produces, e.g. "view,print", "problem,solution", or
 #                 "none" for a single undifferentiated PDF. This is the
@@ -91,15 +102,48 @@ occurrence_date() {
     add_days "$week_monday" "$offset"
 }
 
-# format_slot_id SLOT_PATTERN N SUFFIX -> SLOT_PATTERN with "{n}"
-# replaced by N and "{suffix}" replaced by SUFFIX (or "" if SUFFIX is
-# the literal "-", the "no suffix" marker).
+# format_slot_id SLOT_PATTERN N SUFFIX [COUNT] -> SLOT_PATTERN with "{n}"
+# replaced by N, "{suffix}" replaced by SUFFIX (or "" if SUFFIX is the
+# literal "-", the "no suffix" marker), and "{count}" replaced by COUNT
+# (if given -- see occurrence_count for what it means).
 format_slot_id() {
-    local pattern="$1" n="$2" suffix="$3"
+    local pattern="$1" n="$2" suffix="$3" count="${4:-}"
     [ "$suffix" = "-" ] && suffix=""
     pattern="${pattern//\{n\}/$n}"
     pattern="${pattern//\{suffix\}/$suffix}"
+    pattern="${pattern//\{count\}/$count}"
     echo "$pattern"
+}
+
+# occurrence_count CONF_FILE KIND_ID TARGET_WEEK TARGET_WEEKDAY
+# TARGET_SUFFIX -> the 1-based flat count of the (TARGET_WEEK,
+# TARGET_WEEKDAY, TARGET_SUFFIX) occurrence of KIND_ID among all of that
+# kind's active occurrences from week 1 through TARGET_WEEK, counted in
+# (week, file-row-order) sequence merged across every row sharing
+# KIND_ID. Re-scans from week 1 on every call rather than keeping running
+# state across calls -- deliberately, since bash 3.2 (macOS's shipped
+# /bin/bash) has no associative arrays to hold per-kind counters, and a
+# semester has few enough weeks/rows that re-scanning is negligible.
+occurrence_count() {
+    local conf_file="$1" kind_id="$2" target_week="$3" target_weekday="$4" target_suffix="$5"
+    local k l w s sp v ws we ew week count=0
+    for ((week = 1; week <= target_week; week++)); do
+        while IFS='|' read -r k l w s sp v ws we ew; do
+            [ -z "$k" ] && continue
+            case "$k" in \#*) continue ;; esac
+            [ "$k" = "$kind_id" ] || continue
+            if [ "$week" -lt "$ws" ] || [ "$week" -gt "$we" ]; then continue; fi
+            if [ -n "$ew" ] && [ "$ew" != "-" ]; then
+                case ",${ew}," in *",${week},"*) continue ;; esac
+            fi
+            count=$((count + 1))
+            if [ "$week" -eq "$target_week" ] && [ "$w" = "$target_weekday" ] && [ "$s" = "$target_suffix" ]; then
+                echo "$count"
+                return 0
+            fi
+        done < <(grep -vE '^\s*#|^\s*$' "$conf_file")
+    done
+    echo "$count"
 }
 
 # week_occurrences CONF_FILE WEEK_MONDAY TEACHING_WEEK -> one line per
@@ -126,7 +170,7 @@ format_slot_id() {
 week_occurrences() {
     local conf_file="$1" week_monday="$2" teaching_week="$3"
     local line kind_id label weekday suffix slot_pattern variants week_start week_end exclude_weeks
-    local date slot_id
+    local date slot_id count
     while IFS='|' read -r kind_id label weekday suffix slot_pattern variants week_start week_end exclude_weeks; do
         [ -z "$kind_id" ] && continue
         case "$kind_id" in \#*) continue ;; esac
@@ -142,7 +186,11 @@ week_occurrences() {
             echo "week_occurrences: bad weekday '$weekday' for kind '$kind_id'" >&2
             return 1
         }
-        slot_id="$(format_slot_id "$slot_pattern" "$teaching_week" "$suffix")"
+        count=""
+        case "$slot_pattern" in
+            *'{count}'*) count="$(occurrence_count "$conf_file" "$kind_id" "$teaching_week" "$weekday" "$suffix")" ;;
+        esac
+        slot_id="$(format_slot_id "$slot_pattern" "$teaching_week" "$suffix" "$count")"
         printf '%s|%s|%s|%s|%s|%s|%s\n' \
             "$kind_id" "$label" "$slot_id" "$date" "$weekday" "$suffix" "$variants"
     done < <(grep -vE '^\s*#|^\s*$' "$conf_file")

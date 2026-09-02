@@ -58,6 +58,33 @@ test_schedule_lib() {
     assert_contains "week_occurrences: bad-weekday error message names the kind" "$out" "lecture"
     rm -f "$bad_conf"
 
+    # {count}: flat sequential numbering across occurrences, not
+    # week-derived -- e.g. 2 labs/week (mon/A, thu/B) numbered Lab1..LabN
+    # straight through, not Lab1A/Lab1B/Lab2A...
+    local count_conf
+    count_conf="$(mktemp)"
+    {
+        printf 'lab|Lab|mon|A|Lab{count}|instructor,student|1|9|-\n'
+        printf 'lab|Lab|thu|B|Lab{count}|instructor,student|1|9|3\n'
+    } > "$count_conf"
+    out="$(week_occurrences "$count_conf" 2026-08-10 1)"
+    assert_contains "week 1 mon lab is Lab1" "$out" "Lab1|"
+    out="$(week_occurrences "$count_conf" 2026-08-10 1 | tail -1)"
+    assert_contains "week 1 thu lab is Lab2" "$out" "Lab2|"
+    out="$(week_occurrences "$count_conf" 2026-08-10 2 | head -1)"
+    assert_contains "week 2 mon lab is Lab3" "$out" "Lab3|"
+    out="$(week_occurrences "$count_conf" 2026-08-10 2 | tail -1)"
+    assert_contains "week 2 thu lab is Lab4" "$out" "Lab4|"
+    # week 3's thu occurrence is EXCLUDE_WEEKS'd out (e.g. a tutorial
+    # takes that slot) -- the count must not reserve a gap for it.
+    out="$(week_occurrences "$count_conf" 2026-08-10 3)"
+    assert_contains "week 3 mon lab is Lab5 (only occurrence that week)" "$out" "Lab5|"
+    out="$(week_occurrences "$count_conf" 2026-08-10 4 | head -1)"
+    assert_contains "week 4 mon lab is Lab6 (no gap left by week 3's exclusion)" "$out" "Lab6|"
+    out="$(week_occurrences "$count_conf" 2026-08-10 4 | tail -1)"
+    assert_contains "week 4 thu lab is Lab7" "$out" "Lab7|"
+    rm -f "$count_conf"
+
     # empty-or-comment-only conf files are a normal state (e.g. a course
     # with no session kinds declared yet), not an error.
     local empty_conf
