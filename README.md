@@ -148,16 +148,12 @@ A backend at `backends/<name>/` implements three executable scripts:
 - **`extract-title.sh SOURCE_PATH`** — print the slot's display title
   (empty if none).
 
-A backend *may* additionally hook into snippet-testing (see below) by
-producing annotated source files in the format that toolchain expects.
-
-## Snippet testing is a separate axis from rendering
-
-The Python/py-slang (Source Academy) interactive-snippet-testing
-toolchain lives in `core/`, not in any one backend. Its contract is "a
-directory of annotated `.py` files exists for slot X" — it doesn't care
-how those files were produced. A course/backend that doesn't want this
-feature simply never produces that directory.
+Interactive-snippet testing (e.g. running embedded code blocks through a
+real interpreter like py-slang) is **not part of this toolkit** — it
+stays entirely inside the consuming course repo (see
+`cs1101s/course-materials`' own `package.json`/`scripts/test-with-slang.py`
+for that repo's version), since it's a course/content-authoring concern
+orthogonal to scheduling, versioning, and rendering.
 
 ## Portability
 
