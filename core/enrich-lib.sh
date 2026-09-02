@@ -130,3 +130,47 @@ holiday_emoji() {
         $1==n { print $2; exit }
     ' "$emoji_file"
 }
+
+# kind_extra_link_label KIND_ID LABELS_FILE -> the label for this kind's
+# optional second link (e.g. "lecture" -> "Recording"), empty if this
+# kind doesn't have one. Format: KIND_ID|LABEL. A course that doesn't
+# want a second link per occurrence (Panopto recordings, a livestream,
+# whatever) just never creates this file -- every kind's cell renders
+# exactly as before.
+kind_extra_link_label() {
+    local kind_id="$1" labels_file="$2"
+    [ -f "$labels_file" ] || return 0
+    grep -vE '^\s*#|^\s*$' "$labels_file" | grep "^${kind_id}|" | head -1 | cut -d'|' -f2- || true
+}
+
+# extra_link_for_slot SLOT_ID LINKS_FILE -> the URL for this slot's
+# extra link, empty if none listed yet (renders as a pending/greyed
+# label rather than a live link -- same "no date/timing logic, just
+# list it when it's ready" convention as is_slot_released). Format:
+# SLOT_ID|URL, one per line.
+extra_link_for_slot() {
+    local slot_id="$1" links_file="$2"
+    [ -f "$links_file" ] || return 0
+    grep -vE '^\s*#|^\s*$' "$links_file" | grep "^${slot_id}|" | head -1 | cut -d'|' -f2- || true
+}
+
+# occasion_links WEEK KIND_ID LINKS_FILE -> "LABEL1|URL1|LABEL2|URL2"
+# (URLs may be empty -- pending, same convention as extra_link_for_slot;
+# LABEL2/URL2 may be entirely absent for a single-link occasion), empty
+# if this week+kind has no occasion at all. Format: WEEK|KIND_ID|
+# LABEL1|URL1|LABEL2|URL2, capped at exactly 2 links (matches every real
+# observed need -- e.g. an assessment's "Details"/"Papers") rather than
+# an arbitrary N, so this stays parseable with a fixed-arity `read`
+# rather than a variable-arity parser. A course only needing the plain
+# label (no links) just gives LINK1_LABEL/LINK1_URL empty too -- see
+# slot_kind_label for that simpler, links-free case, which this is
+# meant to be layered on top of, not a replacement for.
+occasion_links() {
+    local week="$1" kind_id="$2" links_file="$3"
+    [ -f "$links_file" ] || return 0
+    awk -F'|' -v w="$week" -v k="$kind_id" '
+        /^[[:space:]]*#/ { next }
+        /^[[:space:]]*$/ { next }
+        $1==w && $2==k { sub(/^[^|]*\|[^|]*\|/, ""); print; exit }
+    ' "$links_file"
+}

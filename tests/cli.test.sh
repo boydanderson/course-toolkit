@@ -61,6 +61,133 @@ test_cli() {
     assert_contains "course.mk's CALENDAR_LINK_COLOR reaches cli canvas" \
         "$colored_canvas_out" '<a href="https://demo-org.example.edu/pdfs/lecture-L1A.view.pdf" style="color:#0000ee;">View</a>'
 
+    # CALENDAR_ROW_ODD_BG (one of the 4 current-week/banding fields
+    # appended after the original 6) -- deterministic, unlike
+    # CALENDAR_CURRENT_BG, which cli.sh deliberately never lets a test
+    # override (TODAY always means the real live date in production), so
+    # testing it end-to-end through the CLI would depend on which week
+    # the test happened to run in.
+    printf '\nCALENDAR_ROW_ODD_BG = #f0f0f0\n' >> "$scratch/config/course.mk"
+    local banded_canvas_out
+    banded_canvas_out="$(COURSE_ROOT="$scratch" TOOLKIT_DIR="$TOOLKIT_DIR" \
+        SESSION_KINDS_FILE="$scratch/config/session-kinds.conf" \
+        CONTENT_MAP_FILE="$scratch/config/content-map.conf" \
+        "$cli" canvas)"
+    assert_contains "course.mk's CALENDAR_ROW_ODD_BG reaches cli canvas" \
+        "$banded_canvas_out" "background:#f0f0f0;"
+
+    # Key Events / Resources: optional, config-driven, absent from
+    # readme_out/canvas_out above since this scratch course has none of
+    # the three files -- proves the feature is opt-in, not just that it
+    # works when wired up.
+    assert_not_contains "no key-events.conf: no Key Events section in readme" \
+        "$readme_out" "Key Events"
+    assert_not_contains "no key-events.conf: no Key Events section in canvas" \
+        "$canvas_out" "Key Events"
+    assert_not_contains "no resources file: no Resources section in readme" \
+        "$readme_out" "Resources"
+    assert_not_contains "no resources file: no Resources section in canvas" \
+        "$canvas_out" "Resources"
+
+    printf '2026-10-14|18:00|21:00|Sumobot Competition\n' > "$scratch/config/key-events.conf"
+    printf '<ul><li><a href="https://example.edu/faq">FAQ</a></li></ul>\n' \
+        > "$scratch/config/canvas-resources.html"
+    printf -- '- [FAQ](https://example.edu/faq)\n' > "$scratch/config/readme-resources.md"
+
+    local readme_with_extras canvas_with_extras
+    readme_with_extras="$(COURSE_ROOT="$scratch" TOOLKIT_DIR="$TOOLKIT_DIR" \
+        SESSION_KINDS_FILE="$scratch/config/session-kinds.conf" \
+        CONTENT_MAP_FILE="$scratch/config/content-map.conf" \
+        "$cli" readme)"
+    canvas_with_extras="$(COURSE_ROOT="$scratch" TOOLKIT_DIR="$TOOLKIT_DIR" \
+        SESSION_KINDS_FILE="$scratch/config/session-kinds.conf" \
+        CONTENT_MAP_FILE="$scratch/config/content-map.conf" \
+        "$cli" canvas)"
+
+    assert_contains "readme: Key Events heading appears once configured" \
+        "$readme_with_extras" "## Key Events"
+    assert_contains "readme: the actual event shows up" \
+        "$readme_with_extras" "Sumobot Competition"
+    assert_contains "readme: Resources heading appears once configured" \
+        "$readme_with_extras" "## Resources"
+    assert_contains "readme: the resources file's content is appended verbatim" \
+        "$readme_with_extras" "[FAQ](https://example.edu/faq)"
+
+    assert_contains "canvas: Key Events heading appears once configured" \
+        "$canvas_with_extras" "<h2>Key Events</h2>"
+    assert_contains "canvas: the actual event shows up" \
+        "$canvas_with_extras" "Sumobot Competition"
+    assert_contains "canvas: Resources heading appears once configured" \
+        "$canvas_with_extras" "<h2>Resources</h2>"
+    assert_contains "canvas: the resources file's content is appended verbatim" \
+        "$canvas_with_extras" '<a href="https://example.edu/faq">FAQ</a>'
+
+    # Recording-style extra link, end to end through the CLI.
+    printf 'lecture|Recording\n' > "$scratch/config/kind-extra-links.conf"
+    printf 'L1A|https://panopto.example/L1A\n' > "$scratch/config/extra-links.conf"
+    local canvas_with_recording readme_with_recording
+    canvas_with_recording="$(COURSE_ROOT="$scratch" TOOLKIT_DIR="$TOOLKIT_DIR" \
+        SESSION_KINDS_FILE="$scratch/config/session-kinds.conf" \
+        CONTENT_MAP_FILE="$scratch/config/content-map.conf" \
+        "$cli" canvas)"
+    readme_with_recording="$(COURSE_ROOT="$scratch" TOOLKIT_DIR="$TOOLKIT_DIR" \
+        SESSION_KINDS_FILE="$scratch/config/session-kinds.conf" \
+        CONTENT_MAP_FILE="$scratch/config/content-map.conf" \
+        "$cli" readme)"
+    assert_contains "cli canvas: L1A's recording is a live link" \
+        "$canvas_with_recording" 'href="https://panopto.example/L1A"'
+    assert_contains "cli canvas: L1A's recording label is Recording" \
+        "$canvas_with_recording" ">Recording</a>"
+    assert_contains "cli readme: L1A's recording is a real markdown link" \
+        "$readme_with_recording" "[Recording](https://panopto.example/L1A)"
+
+    # Occasion label + links, end to end through the CLI -- week 1
+    # already has a real L1A occurrence (this fixture's session-kinds.conf
+    # has no excluded weeks), so this also proves the label shows
+    # ALONGSIDE a real occurrence, not just in an otherwise-empty cell.
+    printf '1|lecture|Special Session\n' > "$scratch/config/session-kind-labels.conf"
+    printf '1|lecture|Details|https://example.edu/special-details|Papers|\n' \
+        > "$scratch/config/occasion-links.conf"
+    local canvas_with_occasion readme_with_occasion
+    canvas_with_occasion="$(COURSE_ROOT="$scratch" TOOLKIT_DIR="$TOOLKIT_DIR" \
+        SESSION_KINDS_FILE="$scratch/config/session-kinds.conf" \
+        CONTENT_MAP_FILE="$scratch/config/content-map.conf" \
+        "$cli" canvas)"
+    readme_with_occasion="$(COURSE_ROOT="$scratch" TOOLKIT_DIR="$TOOLKIT_DIR" \
+        SESSION_KINDS_FILE="$scratch/config/session-kinds.conf" \
+        CONTENT_MAP_FILE="$scratch/config/content-map.conf" \
+        "$cli" readme)"
+    assert_contains "cli canvas: occasion label shows alongside the real L1A occurrence" \
+        "$canvas_with_occasion" "Special Session"
+    assert_contains "cli canvas: L1A itself still shows too" \
+        "$canvas_with_occasion" "L1A: Sample Topic"
+    assert_contains "cli canvas: the occasion's live Details link shows" \
+        "$canvas_with_occasion" 'href="https://example.edu/special-details"'
+    assert_contains "cli canvas: the occasion's Papers link is pending (no URL yet)" \
+        "$canvas_with_occasion" '<span style="color:#888888;">Papers</span>'
+    assert_contains "cli readme: occasion label shows alongside the real L1A occurrence" \
+        "$readme_with_occasion" "Special Session"
+    assert_contains "cli readme: the occasion's live Details link shows" \
+        "$readme_with_occasion" "[Details](https://example.edu/special-details)"
+
+    # Kitchen sink: every config file set up above (CALENDAR_* colors,
+    # row banding, Key Events, Resources, Recording, occasion label +
+    # links) is still active in this same scratch course -- confirms all
+    # 5 Stage 5.5 features compose correctly in one real render, not
+    # just in isolation from each other.
+    assert_contains "kitchen sink: CALENDAR_BORDER_COLOR" "$canvas_with_occasion" "border:1px solid #123456;"
+    assert_contains "kitchen sink: CALENDAR_ROW_ODD_BG" "$canvas_with_occasion" "background:#f0f0f0;"
+    assert_contains "kitchen sink: Key Events section" "$canvas_with_occasion" "<h2>Key Events</h2>"
+    assert_contains "kitchen sink: Resources section" "$canvas_with_occasion" "<h2>Resources</h2>"
+    assert_contains "kitchen sink: Recording link" "$canvas_with_occasion" 'href="https://panopto.example/L1A"'
+    assert_contains "kitchen sink: occasion label" "$canvas_with_occasion" "Special Session"
+    assert_contains "kitchen sink: real L1A occurrence still renders too" \
+        "$canvas_with_occasion" "L1A: Sample Topic"
+    assert_contains "kitchen sink (readme): Key Events section" "$readme_with_occasion" "## Key Events"
+    assert_contains "kitchen sink (readme): Resources section" "$readme_with_occasion" "## Resources"
+    assert_contains "kitchen sink (readme): Recording link" \
+        "$readme_with_occasion" "[Recording](https://panopto.example/L1A)"
+
     assert_contains "cli bump moves the version forward" \
         "$(COURSE_ROOT="$scratch" TOOLKIT_DIR="$TOOLKIT_DIR" \
             CONTENT_MAP_FILE="$scratch/config/content-map.conf" \

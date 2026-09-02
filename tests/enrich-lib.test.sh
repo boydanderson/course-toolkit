@@ -55,5 +55,44 @@ test_enrich_lib() {
     assert_eq "holiday_emoji: a curly apostrophe normalizes to match a straight-apostrophe key" \
         "🎉" "$(holiday_emoji "New Year’s Day" "$scratch/emoji.conf")"
 
+    # kind_extra_link_label / extra_link_for_slot
+    printf 'lecture|Recording\n' > "$scratch/kind-extra-links.conf"
+    assert_eq "kind_extra_link_label: match" "Recording" \
+        "$(kind_extra_link_label lecture "$scratch/kind-extra-links.conf")"
+    assert_eq "kind_extra_link_label: no match is empty, not an error" "" \
+        "$(kind_extra_link_label studio "$scratch/kind-extra-links.conf")"
+    assert_eq "kind_extra_link_label: missing file is empty, not an error" "" \
+        "$(kind_extra_link_label lecture "$scratch/nope.conf")"
+
+    printf 'L1A|https://example.edu/recordings/L1A\n' > "$scratch/extra-links.conf"
+    assert_eq "extra_link_for_slot: match" "https://example.edu/recordings/L1A" \
+        "$(extra_link_for_slot L1A "$scratch/extra-links.conf")"
+    assert_eq "extra_link_for_slot: not-yet-listed slot is empty, not an error" "" \
+        "$(extra_link_for_slot L1B "$scratch/extra-links.conf")"
+    assert_eq "extra_link_for_slot: missing file is empty, not an error" "" \
+        "$(extra_link_for_slot L1A "$scratch/nope.conf")"
+
+    # occasion_links -- note the occasion's own title ("Reading
+    # Assessment 1") lives in labels_file/slot_kind_label, a separate
+    # lookup; this file's own fields are LINK labels ("Details",
+    # "Papers"), not the occasion's title.
+    cat > "$scratch/occasion-links.conf" <<'EOF'
+4|lecture|Details|https://example.edu/ra1-details|Papers|https://example.edu/ra1-papers
+6|lecture|Details||
+7|lecture|Details|
+EOF
+    assert_eq "occasion_links: both links present" \
+        "Details|https://example.edu/ra1-details|Papers|https://example.edu/ra1-papers" \
+        "$(occasion_links 4 lecture "$scratch/occasion-links.conf")"
+    assert_eq "occasion_links: a link label with no URL yet -- still returns the label" \
+        "Details||" \
+        "$(occasion_links 6 lecture "$scratch/occasion-links.conf")"
+    assert_eq "occasion_links: a link label with a bare trailing pipe, no second link at all" \
+        "Details|" "$(occasion_links 7 lecture "$scratch/occasion-links.conf")"
+    assert_eq "occasion_links: no match is empty, not an error" "" \
+        "$(occasion_links 5 lecture "$scratch/occasion-links.conf")"
+    assert_eq "occasion_links: missing file is empty, not an error" "" \
+        "$(occasion_links 4 lecture "$scratch/nope.conf")"
+
     rm -rf "$scratch"
 }

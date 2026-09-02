@@ -36,6 +36,27 @@
 #   NOTES_FILE            default: config/week-notes.conf
 #   HOLIDAYS_FILE         default: config/holidays.conf
 #   EMOJI_FILE            default: config/holiday-emoji.conf
+#   KEY_EVENTS_FILE       default: config/key-events.conf (optional -- a
+#                          table of one-off dated events appended after
+#                          the main calendar; see render-events.sh)
+#   RESOURCES_HTML_FILE   default: config/canvas-resources.html (optional
+#                          -- appended verbatim under a "Resources"
+#                          heading in `canvas`'s output)
+#   RESOURCES_MD_FILE     default: config/readme-resources.md (optional
+#                          -- same, for `readme`'s output)
+#   KIND_EXTRA_LINKS_FILE  default: config/kind-extra-links.conf
+#                          (optional, KIND_ID|LABEL -- e.g. "lecture|
+#                          Recording" -- declares which session kinds
+#                          get a second, independently-gated link per
+#                          occurrence)
+#   EXTRA_LINKS_FILE       default: config/extra-links.conf (optional,
+#                          SLOT_ID|URL -- the actual links for whichever
+#                          kinds KIND_EXTRA_LINKS_FILE declares)
+#   OCCASION_LINKS_FILE    default: config/occasion-links.conf (optional,
+#                          WEEK|KIND_ID|LINK1_LABEL|LINK1_URL|LINK2_LABEL|
+#                          LINK2_URL -- up to 2 links for an occasion
+#                          label from LABELS_FILE, e.g. an assessment's
+#                          "Details"/"Papers")
 #
 # config/course.mk additionally supplies (beyond COURSE_CODE/COURSE_NAME/
 # HOSTING_ORG/CANVAS_HOST/RENDERER, see README):
@@ -45,12 +66,16 @@
 #                          one-calendar-week recess follows
 #   PDF_BASE_URL            base URL the calendar's PDF links point at
 #   CALENDAR_BORDER_COLOR, CALENDAR_HEADER_BG, CALENDAR_LINK_COLOR,
-#   CALENDAR_PENDING_COLOR, CALENDAR_CANCELLED_COLOR, CALENDAR_NOTES_COLOR
+#   CALENDAR_PENDING_COLOR, CALENDAR_CANCELLED_COLOR, CALENDAR_NOTES_COLOR,
+#   CALENDAR_CURRENT_BG, CALENDAR_CURRENT_BORDER_COLOR,
+#   CALENDAR_ROW_ODD_BG, CALENDAR_ROW_EVEN_BG
 #                          `canvas`'s colors -- all optional, each falls
 #                          back to render-html.sh's own default if unset
-#                          (CALENDAR_LINK_COLOR's default is "", meaning
-#                          "inherit the embedding page's own link color"
-#                          rather than any specific color). See README's
+#                          (CALENDAR_LINK_COLOR and the four current-week/
+#                          row-banding keys all default to "", meaning
+#                          "no override" -- a course gets no current-week
+#                          highlight or row banding unless it sets at
+#                          least one of those keys). See README's
 #                          "Customizing the calendar's colors".
 set -euo pipefail
 
@@ -67,6 +92,7 @@ source "$TOOLKIT_DIR/core/backend-lib.sh"
 source "$TOOLKIT_DIR/core/enrich-lib.sh"
 source "$TOOLKIT_DIR/core/render-markdown.sh"
 source "$TOOLKIT_DIR/core/render-html.sh"
+source "$TOOLKIT_DIR/core/render-events.sh"
 
 RENDERER="$(get_course_var RENDERER)"
 export RENDERER
@@ -78,6 +104,12 @@ LABELS="${LABELS_FILE:-$COURSE_ROOT/config/session-kind-labels.conf}"
 NOTES="${NOTES_FILE:-$COURSE_ROOT/config/week-notes.conf}"
 HOLIDAYS="${HOLIDAYS_FILE:-$COURSE_ROOT/config/holidays.conf}"
 EMOJI="${EMOJI_FILE:-$COURSE_ROOT/config/holiday-emoji.conf}"
+KEY_EVENTS="${KEY_EVENTS_FILE:-$COURSE_ROOT/config/key-events.conf}"
+RESOURCES_HTML="${RESOURCES_HTML_FILE:-$COURSE_ROOT/config/canvas-resources.html}"
+RESOURCES_MD="${RESOURCES_MD_FILE:-$COURSE_ROOT/config/readme-resources.md}"
+KIND_EXTRA_LINKS="${KIND_EXTRA_LINKS_FILE:-$COURSE_ROOT/config/kind-extra-links.conf}"
+EXTRA_LINKS="${EXTRA_LINKS_FILE:-$COURSE_ROOT/config/extra-links.conf}"
+OCCASION_LINKS="${OCCASION_LINKS_FILE:-$COURSE_ROOT/config/occasion-links.conf}"
 
 SEMESTER_START_MONDAY="$(get_course_var SEMESTER_START_MONDAY)"
 NUM_WEEKS="$(get_course_var NUM_WEEKS)"
@@ -87,8 +119,10 @@ PDF_BASE_URL="$(get_course_var PDF_BASE_URL)"
 
 # Each field left blank here falls back to render-html.sh's own default
 # (_calendar_palette) -- a course only overriding one color doesn't need
-# to respecify the rest.
-CALENDAR_PALETTE="$(get_course_var CALENDAR_BORDER_COLOR)|$(get_course_var CALENDAR_HEADER_BG)|$(get_course_var CALENDAR_LINK_COLOR)|$(get_course_var CALENDAR_PENDING_COLOR)|$(get_course_var CALENDAR_CANCELLED_COLOR)|$(get_course_var CALENDAR_NOTES_COLOR)"
+# to respecify the rest. The last four (current-week highlight, row
+# banding) default to "" either way -- a course gets neither unless it
+# sets at least one of these keys.
+CALENDAR_PALETTE="$(get_course_var CALENDAR_BORDER_COLOR)|$(get_course_var CALENDAR_HEADER_BG)|$(get_course_var CALENDAR_LINK_COLOR)|$(get_course_var CALENDAR_PENDING_COLOR)|$(get_course_var CALENDAR_CANCELLED_COLOR)|$(get_course_var CALENDAR_NOTES_COLOR)|$(get_course_var CALENDAR_CURRENT_BG)|$(get_course_var CALENDAR_CURRENT_BORDER_COLOR)|$(get_course_var CALENDAR_ROW_ODD_BG)|$(get_course_var CALENDAR_ROW_EVEN_BG)"
 
 _content_map_path() {
     # || true: a scheduled slot with no content-map entry (unauthored,
@@ -144,8 +178,19 @@ cmd_readme() {
     _walk_semester "$titles"
     render_markdown_calendar "$SESSION_KINDS" "$SEMESTER_START_MONDAY" \
         "$NUM_WEEKS" "$RECESS_AFTER_WEEK" "$titles" "$ALLOWLIST" "$LABELS" "$NOTES" \
-        "$PDF_BASE_URL" "$HOLIDAYS" "$EMOJI"
+        "$PDF_BASE_URL" "$HOLIDAYS" "$EMOJI" "$KIND_EXTRA_LINKS" "$EXTRA_LINKS" "$OCCASION_LINKS"
     rm -f "$titles"
+
+    local key_events
+    key_events="$(render_key_events_markdown "$KEY_EVENTS")"
+    if [ -n "$key_events" ]; then
+        printf '\n## Key Events\n\n%s\n' "$key_events"
+    fi
+
+    if [ -f "$RESOURCES_MD" ]; then
+        printf '\n## Resources\n\n'
+        cat "$RESOURCES_MD"
+    fi
 }
 
 cmd_canvas() {
@@ -154,8 +199,20 @@ cmd_canvas() {
     _walk_semester "$titles"
     render_html_calendar "$SESSION_KINDS" "$SEMESTER_START_MONDAY" \
         "$NUM_WEEKS" "$RECESS_AFTER_WEEK" "$titles" "$ALLOWLIST" "$LABELS" "$NOTES" \
-        "$PDF_BASE_URL" "$HOLIDAYS" "$EMOJI" "$CALENDAR_PALETTE"
+        "$PDF_BASE_URL" "$HOLIDAYS" "$EMOJI" "$CALENDAR_PALETTE" "" \
+        "$KIND_EXTRA_LINKS" "$EXTRA_LINKS" "$OCCASION_LINKS"
     rm -f "$titles"
+
+    local key_events
+    key_events="$(render_key_events_html "$KEY_EVENTS")"
+    if [ -n "$key_events" ]; then
+        printf '\n<h2>Key Events</h2>\n%s\n' "$key_events"
+    fi
+
+    if [ -f "$RESOURCES_HTML" ]; then
+        printf '\n<h2>Resources</h2>\n'
+        cat "$RESOURCES_HTML"
+    fi
 }
 
 cmd_bump() {

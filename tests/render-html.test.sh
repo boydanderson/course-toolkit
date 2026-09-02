@@ -151,5 +151,143 @@ EOF
             /dev/null /dev/null https://x "$holidays" "$emoji" "$full_palette")" \
         "font-weight:600;color:#ff0000;"
 
+    # Current-week highlighting + row banding: 4 weeks starting Monday
+    # 2026-08-10 -- week 2 spans Mon 2026-08-17..Sun 2026-08-23. Palette
+    # fields 6-9 (current_bg|current_border|row_odd_bg|row_even_bg),
+    # verified by direct field-index inspection before writing this test
+    # (bash's `read -ra` field-counting is exactly what broke this
+    # feature's own implementation once already).
+    local hl_palette='||||||#ffeeee|#ff0000|#f0f0f0|#e0e0e0'
+
+    out="$(render_html_calendar "$kinds" 2026-08-10 4 0 /dev/null /dev/null \
+        /dev/null /dev/null https://x /dev/null /dev/null "$hl_palette" 2026-08-20)"
+    assert_contains "current-week: the matching week's cell uses current_bg" \
+        "$out" "background:#ffeeee;"
+    assert_contains "current-week: the matching week's number cell gets the border accent" \
+        "$out" "border-left:4px solid #ff0000;"
+
+    # Isolate week 2's own <tr>...</tr> block (each row is one giant
+    # line -- see render-html.sh's own printf-without-newlines pattern)
+    # to confirm the highlight lands on THAT week specifically, not just
+    # somewhere in the table.
+    local week2_row
+    week2_row="$(echo "$out" | grep '>2</td>')"
+    assert_contains "current-week: week 2's own row has the highlight" "$week2_row" "#ffeeee"
+    local week1_row
+    week1_row="$(echo "$out" | grep '>1</td>')"
+    assert_not_contains "current-week: week 1's row does NOT get the highlight" "$week1_row" "#ffeeee"
+
+    # Row banding on the non-current weeks: week 1 (odd) gets row_odd_bg,
+    # week 3 (odd, after the current week 2) gets row_odd_bg too --
+    # banding is by row_index, not by proximity to the current week.
+    assert_contains "row banding: week 1 (odd) gets row_odd_bg" "$week1_row" "background:#f0f0f0;"
+    local week4_row
+    week4_row="$(echo "$out" | grep '>4</td>')"
+    assert_contains "row banding: week 4 (even) gets row_even_bg" "$week4_row" "background:#e0e0e0;"
+
+    # No TODAY arg (omitted) still works and doesn't crash -- exercises
+    # the live sgt_date fallback path, even though the actual "is it
+    # current" result depends on when the test runs.
+    assert_success "render_html_calendar with no TODAY arg doesn't crash" \
+        bash -c "source '$TOOLKIT_DIR/core/render-html.sh'; render_html_calendar '$kinds' 2026-08-10 1 0 /dev/null /dev/null /dev/null /dev/null https://x /dev/null /dev/null '$hl_palette' > /dev/null"
+
+    # Backward compat: omitting the palette (or TODAY) entirely must
+    # produce zero highlight/banding markup -- these features are opt-in.
+    out="$(render_html_calendar "$kinds" 2026-08-10 4 0 /dev/null /dev/null \
+        /dev/null /dev/null https://x /dev/null /dev/null)"
+    assert_not_contains "no palette: no border-left accent appears anywhere" "$out" "border-left"
+    assert_not_contains "no palette: no #ffeeee/current-week color appears" "$out" "#ffeeee"
+
+    # Extra link (Recording-style): _html_variant_links directly.
+    local links
+    links="$(_html_variant_links lecture L1A view https://x 1 "" "")"
+    assert_not_contains "_html_variant_links: no extra_link_label means no extra link" \
+        "$links" "Recording"
+
+    links="$(_html_variant_links lecture L1A view https://x 1 "" Recording "")"
+    assert_contains "_html_variant_links: label set, no URL yet -> pending span" \
+        "$links" '<span style="color:#888888;">Recording</span>'
+
+    links="$(_html_variant_links lecture L1A view https://x 1 "" Recording "https://panopto.example/L1A")"
+    assert_contains "_html_variant_links: label + URL -> a live link" \
+        "$links" '<a href="https://panopto.example/L1A">Recording</a>'
+    assert_contains "_html_variant_links: extra link comes after the normal variant link" \
+        "$links" '<a href="https://x/lecture-L1A.view.pdf">View</a> &middot; <a href="https://panopto.example/L1A">Recording</a>'
+
+    # render_html_calendar end to end: kind_extra_links.conf declares
+    # "lecture" gets a Recording link; extra-links.conf has a URL for
+    # L1A but not L1B -- proves the per-kind opt-in AND the
+    # live-vs-pending distinction through the whole call chain.
+    local kind_extra_links="$scratch/kind-extra-links.conf"
+    printf 'lecture|Recording\n' > "$kind_extra_links"
+    local extra_links="$scratch/extra-links.conf"
+    printf 'L1A|https://panopto.example/L1A\n' > "$extra_links"
+
+    out="$(render_html_calendar "$kinds2" 2026-08-10 1 0 "$titles" "$allowlist2" \
+        /dev/null /dev/null https://example.org/pdfs /dev/null /dev/null \
+        "" 2026-08-10 "$kind_extra_links" "$extra_links")"
+    assert_contains "render_html_calendar: L1A's recording is a live link" \
+        "$out" '<a href="https://panopto.example/L1A">Recording</a>'
+    assert_contains "render_html_calendar: L1B's recording is pending (not yet listed)" \
+        "$out" '<span style="color:#888888;">Recording</span>'
+
+    # Backward compat: omitting kind_extra_links_file entirely means no
+    # kind gets an extra link at all, even ones with real occurrences.
+    out="$(render_html_calendar "$kinds2" 2026-08-10 1 0 "$titles" "$allowlist2" \
+        /dev/null /dev/null https://example.org/pdfs /dev/null /dev/null)"
+    assert_not_contains "no kind_extra_links_file: no Recording links anywhere" \
+        "$out" "Recording"
+
+    # The actual Stage-5-discovered gap: a kind with SEVERAL weekly
+    # occurrences (lecture A + B) where only ONE is excluded a given
+    # week (matching CS1101S's real config: Friday's slot excluded on
+    # assessment weeks, Wednesday's still meets) must show the occasion
+    # label ALONGSIDE the occurrence that's still active, not lose it
+    # entirely (the old behavior: slot_kind_label only fired when the
+    # WHOLE kind had zero occurrences that week).
+    local kinds3="$scratch/session-kinds3.conf"
+    printf 'lecture|Lecture|wed|A|L{n}{suffix}|view,print|1|13|-\n' > "$kinds3"
+    printf 'lecture|Lecture|fri|B|L{n}{suffix}|view,print|1|13|4\n' >> "$kinds3"
+    local occasion_labels="$scratch/occasion-labels.conf"
+    printf '4|lecture|Reading Assessment 1\n' > "$occasion_labels"
+    local occasion_links_conf="$scratch/occasion-links.conf"
+    printf '4|lecture|Details|https://example.edu/ra1-details|Papers|https://example.edu/ra1-papers\n' \
+        > "$occasion_links_conf"
+
+    out="$(render_html_calendar "$kinds3" 2026-08-10 4 0 /dev/null /dev/null \
+        "$occasion_labels" /dev/null https://example.org/pdfs /dev/null /dev/null \
+        "" 2026-08-10 "" "" "$occasion_links_conf")"
+
+    local week4_row
+    week4_row="$(echo "$out" | grep '>4</td>')"
+    assert_contains "occasion: week 4's cell still shows L4A (the non-excluded occurrence)" \
+        "$week4_row" "L4A"
+    assert_contains "occasion: week 4's cell ALSO shows the occasion label" \
+        "$week4_row" "Reading Assessment 1"
+    assert_contains "occasion: the occasion's Details link is live" \
+        "$week4_row" '<a href="https://example.edu/ra1-details">Details</a>'
+    assert_contains "occasion: the occasion's Papers link is live" \
+        "$week4_row" '<a href="https://example.edu/ra1-papers">Papers</a>'
+
+    local week1_row
+    week1_row="$(echo "$out" | grep '>1</td>')"
+    assert_not_contains "occasion: week 1 (no occasion configured) shows no occasion text" \
+        "$week1_row" "Reading Assessment"
+    assert_contains "occasion: week 1 still shows both L1A and L1B normally" \
+        "$week1_row" "L1A"
+    assert_contains "occasion: week 1 still shows both L1A and L1B normally (2)" \
+        "$week1_row" "L1B"
+
+    # A course with no OCCASION_LINKS_FILE still gets the plain label --
+    # this is exactly the pre-existing slot_kind_label behavior, just no
+    # longer conditional on the kind having zero occurrences.
+    out="$(render_html_calendar "$kinds3" 2026-08-10 4 0 /dev/null /dev/null \
+        "$occasion_labels" /dev/null https://example.org/pdfs /dev/null /dev/null)"
+    week4_row="$(echo "$out" | grep '>4</td>')"
+    assert_contains "occasion: label still shows with no OCCASION_LINKS_FILE at all" \
+        "$week4_row" "Reading Assessment 1"
+    assert_not_contains "occasion: no Details/Papers text without the file" \
+        "$week4_row" "Details"
+
     rm -rf "$scratch"
 }

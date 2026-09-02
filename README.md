@@ -90,6 +90,9 @@ actually wants to change:
 | `CALENDAR_PENDING_COLOR` | an unreleased item's text | `#888888` |
 | `CALENDAR_CANCELLED_COLOR` | a holiday-cancelled occurrence's text | `#c0392b` |
 | `CALENDAR_NOTES_COLOR` | the Notes column's text | `#555555` |
+| `CALENDAR_CURRENT_BG` | the current teaching week's row background | *(unset — no highlight)* |
+| `CALENDAR_CURRENT_BORDER_COLOR` | the current week's number-cell left-accent border | *(unset — no accent)* |
+| `CALENDAR_ROW_ODD_BG` / `CALENDAR_ROW_EVEN_BG` | alternating row backgrounds | *(unset — no banding)* |
 
 ```
 CALENDAR_BORDER_COLOR = #dddddd
@@ -99,7 +102,42 @@ CALENDAR_LINK_COLOR = #1a5fb4
 Only `cli canvas` (the HTML/Canvas renderer) has this concept. `cli
 readme`'s output is plain Markdown — a table meant to render correctly
 wherever Markdown is read (GitHub, a plain-text viewer, ...), so it
-carries no inline styling to make configurable in the first place.
+carries no inline styling to make configurable in the first place. The
+current-week/row-banding colors are likewise HTML-only for the same
+reason.
+
+### Optional presentation features
+
+Each of these is entirely config-driven and opt-in — a course that
+doesn't create the relevant file just doesn't get the feature, and every
+existing course's output is completely unaffected by their existence:
+
+- **Key Events** — a table of one-off dated events (a competition, an
+  exam, a guest lecture) that don't fit the regular weekly grid.
+  `config/key-events.conf`, format `DATE|START_TIME|END_TIME|NAME`, one
+  per line. `cli readme`/`cli canvas` append it after the main calendar
+  table automatically if the file exists and has real rows.
+- **Resources** — a maintainer-edited block appended verbatim under a
+  "Resources" heading. Two separate files since Markdown and HTML can't
+  share content verbatim: `config/canvas-resources.html` (for `cli
+  canvas`) and `config/readme-resources.md` (for `cli readme`).
+- **A second, independently-gated link per occurrence** (e.g. a lecture
+  recording that goes up on its own schedule, separate from the PDF
+  release) — `config/kind-extra-links.conf` (`KIND_ID|LABEL`, e.g.
+  `lecture|Recording`, declares which kinds get one) plus
+  `config/extra-links.conf` (`SLOT_ID|URL`, the actual per-slot links —
+  same shape as the release allow-list's sibling files, live once
+  listed, a greyed pending label otherwise).
+- **Occasion labels with optional links** — a week+kind label (see
+  the release/label/note/holiday config above) now always shows
+  alongside any real occurrences that week, not just when the kind has
+  *zero* occurrences (e.g. a course with 2 lectures/week where only one
+  is excluded for an assessment that week still sees the assessment
+  labelled, next to the lecture that still meets). Give it up to 2
+  optional links (e.g. an assessment's "Details"/"Papers") via
+  `config/occasion-links.conf`, format `WEEK|KIND_ID|LINK1_LABEL|
+  LINK1_URL|LINK2_LABEL|LINK2_URL` (either URL may be empty — pending,
+  same convention as everywhere else).
 
 ## Using it
 
