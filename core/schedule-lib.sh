@@ -7,11 +7,13 @@
 # hardcoded "recess always falls after week 6" rule the first one didn't).
 #
 # A course declares its weekly shape as a flat list of (kind, occurrence)
-# rows in config/session-kinds.conf -- see core/testdata/*.conf for two
-# worked examples (CS1101S's real shape: studio + two lectures + a
-# reflection; CS2030S's target shape: one lecture + one recitation + one
-# lab). This engine turns that declaration + a calendar Monday date into
-# the concrete slot IDs/dates/variants for one teaching week.
+# rows in config/session-kinds.conf -- see tests/fixtures/*/config/ for
+# two worked examples (demo101: studio + two lectures + a reflection;
+# demo201: one lecture + one recitation + one lab -- a genuinely
+# different session-kind vocabulary, proving the engine doesn't assume a
+# fixed kind set). This engine turns that declaration + a calendar
+# Monday date into the concrete slot IDs/dates/variants for one teaching
+# week.
 #
 # Deliberately renderer- and institution-agnostic:
 #   - Doesn't know or care what format a slot's source file is (that's a
