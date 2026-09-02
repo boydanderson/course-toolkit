@@ -7,19 +7,26 @@
 # define test_foo). Exits nonzero if anything failed, so this is
 # CI-usable as-is.
 #
-# Usage: tests/run.sh [--skip-latex]
+# Usage: tests/run.sh [--skip-latex] [--skip-typst]
 #   --skip-latex   skip tests/backends-latex-beamer.test.sh (real
 #                  pdflatex compiles) -- for an environment without a
 #                  LaTeX install. Auto-skipped anyway if `pdflatex`
 #                  isn't on PATH; this flag is for explicitly opting out
 #                  even when it is.
+#   --skip-typst   same, for tests/backends-typst.test.sh (real `typst`
+#                  compiles + `pdfinfo`) -- auto-skipped if either isn't
+#                  on PATH.
 set -uo pipefail
 
 TESTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 export TOOLKIT_DIR="$(cd "$TESTS_DIR/.." && pwd)"
 
 SKIP_LATEX=0
-[ "${1:-}" = "--skip-latex" ] && SKIP_LATEX=1
+SKIP_TYPST=0
+for arg in "$@"; do
+    [ "$arg" = "--skip-latex" ] && SKIP_LATEX=1
+    [ "$arg" = "--skip-typst" ] && SKIP_TYPST=1
+done
 
 source "$TESTS_DIR/assert.sh"
 
@@ -29,6 +36,12 @@ for test_file in "$TESTS_DIR"/*.test.sh; do
     if [ "$base" = "backends-latex-beamer" ]; then
         if [ "$SKIP_LATEX" = 1 ] || ! command -v pdflatex > /dev/null 2>&1; then
             echo "=== $base (skipped -- no pdflatex, or --skip-latex) ==="
+            continue
+        fi
+    fi
+    if [ "$base" = "backends-typst" ]; then
+        if [ "$SKIP_TYPST" = 1 ] || ! command -v typst > /dev/null 2>&1 || ! command -v pdfinfo > /dev/null 2>&1; then
+            echo "=== $base (skipped -- no typst/pdfinfo, or --skip-typst) ==="
             continue
         fi
     fi

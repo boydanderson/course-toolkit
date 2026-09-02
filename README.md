@@ -20,6 +20,9 @@ core/                    Renderer-agnostic engine -- schedule, version
                           know or care what format a slot's source is.
 backends/
   latex-beamer/           LaTeX/Beamer renderer backend.
+  typst/                  Typst renderer backend -- one source compiled
+                          twice with a different `--input`, not two
+                          header files (see its own comments).
   test/                   Minimal reference backend -- template for a
                           new one.
 ```
@@ -202,9 +205,15 @@ Every script here targets bash 3.2, since macOS ships that as
 ## Testing
 
 ```bash
-tests/run.sh               # full suite, including real pdflatex compiles
-tests/run.sh --skip-latex  # skip those if you don't have LaTeX installed
+tests/run.sh               # full suite, including real pdflatex/typst compiles
+tests/run.sh --skip-latex  # skip pdflatex compiles if you don't have LaTeX installed
+tests/run.sh --skip-typst  # same, for typst compiles
 ```
+
+Both `backends/latex-beamer` and `backends/typst`'s own tests auto-skip
+(no flag needed) if the real toolchain they compile with (`pdflatex`, or
+`typst`+`pdfinfo`) isn't on `PATH` — CI's `texlive/texlive` container has
+`pdflatex` but not `typst`, so `backends-typst.test.sh` skips there.
 
 No external test framework — see `tests/assert.sh`. Runs in CI
 (`.github/workflows/test.yml`) on every push and PR.
