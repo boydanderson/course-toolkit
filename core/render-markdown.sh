@@ -33,7 +33,7 @@ _md_variant_links() {
             label="Sheet"
             fname="${kind_id}-${slot_id}.pdf"
         else
-            label="${v^}"
+            label="$(_capitalize "$v")"
             fname="${kind_id}-${slot_id}.${v}.pdf"
         fi
         if [ "$released" = "1" ]; then
@@ -109,7 +109,7 @@ render_markdown_calendar() {
     local sep="|------|"
     local k
     for k in "${kind_ids[@]}"; do
-        header="${header} ${k^} |"
+        header="${header} $(_capitalize "$k") |"
         sep="${sep}------|"
     done
     header="${header} Notes |"

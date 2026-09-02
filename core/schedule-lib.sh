@@ -61,8 +61,15 @@ source "$SCHEDULE_LIB_DIR/date-lib.sh"
 
 # weekday_offset NAME -> 0-6 (Monday=0 .. Sunday=6), or empty + nonzero
 # exit if NAME isn't recognized. NAME is case-insensitive.
+#
+# Lowercasing via `tr`, not bash 4+'s ${var,,} -- macOS ships bash 3.2 as
+# /bin/bash (confirmed for real: a plain #!/bin/bash script hits "bad
+# substitution" there), and this toolkit shouldn't assume every consumer
+# has a newer bash ahead of it on PATH.
 weekday_offset() {
-    case "${1,,}" in
+    local lower
+    lower="$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')"
+    case "$lower" in
         mon) echo 0 ;;
         tue) echo 1 ;;
         wed) echo 2 ;;

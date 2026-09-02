@@ -45,7 +45,7 @@ _html_variant_links() {
         if [ -z "$v" ]; then
             label="Sheet"; fname="${kind_id}-${slot_id}.pdf"
         else
-            label="${v^}"; fname="${kind_id}-${slot_id}.${v}.pdf"
+            label="$(_capitalize "$v")"; fname="${kind_id}-${slot_id}.${v}.pdf"
         fi
         if [ "$released" = "1" ]; then
             parts+=("<a href=\"${base_url}/${fname}\">${label}</a>")
@@ -108,7 +108,7 @@ render_html_calendar() {
     printf '<th style="%s">Week</th>' "$th_style"
     local k
     for k in "${kind_ids[@]}"; do
-        printf '<th style="%s">%s</th>' "$th_style" "${k^}"
+        printf "<th style=\"%s\">%s</th>" "$th_style" "$(_capitalize "$k")"
     done
     printf '<th style="%s">Notes</th>' "$th_style"
     echo '</tr></thead><tbody>'

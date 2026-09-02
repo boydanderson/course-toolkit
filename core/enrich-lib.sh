@@ -6,6 +6,16 @@
 # backend_extract_title -- see backend-lib.sh) from "what do we show in
 # the table" (these renderers' only concern).
 
+# _capitalize WORD -> WORD with its first character upper-cased (e.g.
+# "lecture" -> "Lecture", "view" -> "View"), for column headers/variant
+# labels. Portable `tr`/`cut`, not bash 4+'s ${var^} -- macOS ships bash
+# 3.2 as /bin/bash, which doesn't support it (see schedule-lib.sh's
+# weekday_offset for the same fix, confirmed for real).
+_capitalize() {
+    local w="$1"
+    printf '%s%s' "$(printf '%s' "${w:0:1}" | tr '[:lower:]' '[:upper:]')" "${w:1}"
+}
+
 # is_slot_released SLOT_ID ALLOWLIST_FILE -> success (0) if SLOT_ID is
 # listed, failure (1) otherwise. One ID per line, comments/blanks
 # ignored -- the same allow-list shape used throughout this ecosystem
