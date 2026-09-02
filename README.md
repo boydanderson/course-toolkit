@@ -17,7 +17,8 @@ specific commit — update deliberately, never track `main`.
 ```
 core/                    Renderer-agnostic engine -- schedule, version
                           tracking, Canvas/README generation. Doesn't
-                          know or care what format a slot's source is.
+                          know or care what format a slot's source is,
+                          or which institution a course belongs to.
 backends/
   latex-beamer/           LaTeX/Beamer renderer backend.
   typst/                  Typst renderer backend -- one source compiled
@@ -25,6 +26,12 @@ backends/
                           header files (see its own comments).
   test/                   Minimal reference backend -- template for a
                           new one.
+institutions/
+  nus/                    Optional NUS/Singapore-specific data-fetching
+                          utilities (real public-holiday + academic-
+                          calendar data). Not sourced by core/ or by any
+                          backend -- a course opts in by running it
+                          itself. See its own section below.
 ```
 
 `core/` never contains renderer-specific logic (no `pdflatex` calls, no
@@ -195,6 +202,48 @@ stays entirely inside the consuming course repo (see
 `cs1101s/course-materials`' own `package.json`/`scripts/test-with-slang.py`
 for that repo's version), since it's a course/content-authoring concern
 orthogonal to scheduling, versioning, and rendering.
+
+## institutions/nus/: real holiday data for NUS courses
+
+`core/enrich-lib.sh`'s `is_holiday`/`holiday_emoji` read a course's own
+flat `config/holidays.conf` (`DATE|NAME`) and `config/holiday-emoji.conf`
+(`HOLIDAY_NAME|EMOJI`) — deliberately just data as far as `core/` is
+concerned, since fetching a real institution's public-holiday calendar
+is out of scope for a generic toolkit. `institutions/nus/` is an
+optional, pluggable way to produce that data for real — the same
+"opt-in, doesn't touch core/" shape as `backends/`, just for institution
+data instead of a renderer:
+
+- **`calendar-data-lib.sh`** — `fetch_sg_holidays_dynamic` (Singapore
+  public holidays from data.gov.sg), `fetch_nus_calendar_dynamic` (NUS's
+  own academic-calendar PDF — recess/reading week dates, plus
+  NUS-specific holidays like Well-Being Day), and
+  `fetch_nusmods_exam_dynamic` (a module's final exam date/time from the
+  NUSMods API). Ported from `cs1101s/course-materials`' own
+  `scripts/fetch-holidays.sh`, proven there against the real APIs first.
+- **`fetch-calendar-data.sh`** — the orchestrator: run it with
+  `COURSE_ROOT` set to a course repo (reads that repo's
+  `config/course.mk` for `COURSE_CODE`/`SEMESTER_START_MONDAY`), and it
+  writes real Singapore + NUS holiday data straight to that course's
+  `config/holidays.conf` — the exact file `cli.sh`'s `HOLIDAYS_FILE`
+  already defaults to — plus a raw fetch cache under
+  `config/calendar-data/` for reference. A course with no `COURSE_CODE`
+  set just skips the (optional) NUSMods exam-date fetch with a warning,
+  nothing else is affected.
+- **`holiday-emoji.conf`** — a shared default `HOLIDAY_NAME|EMOJI` map
+  for the common Singapore/NUS holidays; copy it into a course's own
+  `config/holiday-emoji.conf` as a starting point.
+
+```bash
+COURSE_ROOT=/path/to/your-course-repo \
+    tooling/institutions/nus/fetch-calendar-data.sh
+```
+
+Makes real network calls (data.gov.sg, nus.edu.sg, api.nusmods.com) —
+not part of `tests/run.sh`'s offline suite, same as
+`cs1101s/course-materials`' own equivalent was never part of its bash
+test suite either. Re-run it whenever a course's semester dates change
+or a new academic year's data is needed.
 
 ## Portability
 
