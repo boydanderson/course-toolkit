@@ -43,7 +43,7 @@ test_enrich_lib() {
 
     # is_holiday / holiday_emoji
     printf '2026-10-09|NUS Well-Being Day\n' > "$scratch/holidays.conf"
-    printf 'NUS Well-Being Day|🧘\nDeepavali|🪔\n' > "$scratch/emoji.conf"
+    printf "NUS Well-Being Day|🧘\nDeepavali|🪔\nNew Year's Day|🎉\n" > "$scratch/emoji.conf"
     assert_eq "is_holiday: match returns the name" \
         "NUS Well-Being Day" "$(is_holiday 2026-10-09 "$scratch/holidays.conf")"
     assert_failure "is_holiday: no match" is_holiday 2026-10-10 "$scratch/holidays.conf"
@@ -52,6 +52,8 @@ test_enrich_lib() {
         "🪔" "$(holiday_emoji "Deepavali (Observed)" "$scratch/emoji.conf")"
     assert_eq "holiday_emoji: no mapping is empty, not an error" \
         "" "$(holiday_emoji "Not A Real Holiday" "$scratch/emoji.conf")"
+    assert_eq "holiday_emoji: a curly apostrophe normalizes to match a straight-apostrophe key" \
+        "🎉" "$(holiday_emoji "New Year’s Day" "$scratch/emoji.conf")"
 
     rm -rf "$scratch"
 }

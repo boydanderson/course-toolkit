@@ -45,4 +45,27 @@ test_schedule_lib() {
     # session_kind_ids dedupes multiple occurrence rows of the same kind
     out="$(session_kind_ids "$TOOLKIT_DIR/tests/fixtures/demo101/config/session-kinds.conf" | tr '\n' ' ')"
     assert_eq "session_kind_ids: 3 distinct kinds, lecture not doubled" "studio lecture reflection " "$out"
+
+    # week_occurrences: a bad weekday must propagate as a real failure
+    # (not silently produce a garbage/empty date), since a typo'd
+    # session-kinds.conf row should be loud, not swallowed.
+    local bad_conf
+    bad_conf="$(mktemp)"
+    printf 'lecture|Lecture|notaday|A|L{n}{suffix}|view,print|1|13|-\n' > "$bad_conf"
+    assert_failure "week_occurrences propagates a bad weekday as a failure" \
+        week_occurrences "$bad_conf" 2026-08-10 1
+    out="$(week_occurrences "$bad_conf" 2026-08-10 1 2>&1 >/dev/null)"
+    assert_contains "week_occurrences: bad-weekday error message names the kind" "$out" "lecture"
+    rm -f "$bad_conf"
+
+    # empty-or-comment-only conf files are a normal state (e.g. a course
+    # with no session kinds declared yet), not an error.
+    local empty_conf
+    empty_conf="$(mktemp)"
+    printf '# nothing here yet\n\n' > "$empty_conf"
+    assert_eq "week_occurrences: comment-only conf yields no occurrences, not an error" \
+        "" "$(week_occurrences "$empty_conf" 2026-08-10 1)"
+    assert_eq "session_kind_ids: comment-only conf yields no kinds, not an error" \
+        "" "$(session_kind_ids "$empty_conf")"
+    rm -f "$empty_conf"
 }

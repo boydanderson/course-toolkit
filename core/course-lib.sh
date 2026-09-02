@@ -27,8 +27,22 @@ get_course_var() {
     local course_root="${COURSE_ROOT:-.}"
     local course_mk="$course_root/config/course.mk"
     [ -f "$course_mk" ] || return 0
-    grep -E "^$key[[:space:]]*=" "$course_mk" | head -1 \
-        | sed -E 's/^[A-Za-z_][A-Za-z_0-9]*[[:space:]]*=[[:space:]]*//' \
-        | sed -E 's/[[:space:]]*#.*$//' \
-        | sed -E 's/[[:space:]]*$//'
+    # || true: a key not present in course.mk is a normal "unset, use my
+    # own default" state for the caller, not an error -- without this, a
+    # caller running under `set -o pipefail` (e.g. cli.sh) sees grep's
+    # no-match exit status propagate through the pipe and abort under
+    # `set -e`, even though sed (the pipeline's last command) exits 0.
+    local raw
+    raw="$(grep -E "^$key[[:space:]]*=" "$course_mk" | head -1 \
+        | sed -E 's/^[A-Za-z_][A-Za-z_0-9]*[[:space:]]*=[[:space:]]*//' || true)"
+    # A value that itself starts with '#' (e.g. a hex color like
+    # "#123456") isn't a comment -- only strip a '#' that comes after at
+    # least one character of real value, so CALENDAR_BORDER_COLOR = #fff
+    # doesn't get eaten whole by the same rule that strips "KEY = value #
+    # trailing note".
+    case "$raw" in
+        '#'*) raw="#$(printf '%s' "${raw#\#}" | sed -E 's/[[:space:]]*#.*$//')" ;;
+        *) raw="$(printf '%s' "$raw" | sed -E 's/[[:space:]]*#.*$//')" ;;
+    esac
+    printf '%s' "$raw" | sed -E 's/[[:space:]]*$//'
 }

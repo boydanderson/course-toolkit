@@ -44,6 +44,14 @@
 #   RECESS_AFTER_WEEK      0 for none, else the teaching week number a
 #                          one-calendar-week recess follows
 #   PDF_BASE_URL            base URL the calendar's PDF links point at
+#   CALENDAR_BORDER_COLOR, CALENDAR_HEADER_BG, CALENDAR_LINK_COLOR,
+#   CALENDAR_PENDING_COLOR, CALENDAR_CANCELLED_COLOR, CALENDAR_NOTES_COLOR
+#                          `canvas`'s colors -- all optional, each falls
+#                          back to render-html.sh's own default if unset
+#                          (CALENDAR_LINK_COLOR's default is "", meaning
+#                          "inherit the embedding page's own link color"
+#                          rather than any specific color). See README's
+#                          "Customizing the calendar's colors".
 set -euo pipefail
 
 CLI_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -76,6 +84,11 @@ NUM_WEEKS="$(get_course_var NUM_WEEKS)"
 RECESS_AFTER_WEEK="$(get_course_var RECESS_AFTER_WEEK)"
 [ -z "$RECESS_AFTER_WEEK" ] && RECESS_AFTER_WEEK=0
 PDF_BASE_URL="$(get_course_var PDF_BASE_URL)"
+
+# Each field left blank here falls back to render-html.sh's own default
+# (_calendar_palette) -- a course only overriding one color doesn't need
+# to respecify the rest.
+CALENDAR_PALETTE="$(get_course_var CALENDAR_BORDER_COLOR)|$(get_course_var CALENDAR_HEADER_BG)|$(get_course_var CALENDAR_LINK_COLOR)|$(get_course_var CALENDAR_PENDING_COLOR)|$(get_course_var CALENDAR_CANCELLED_COLOR)|$(get_course_var CALENDAR_NOTES_COLOR)"
 
 _content_map_path() {
     # || true: a scheduled slot with no content-map entry (unauthored,
@@ -141,7 +154,7 @@ cmd_canvas() {
     _walk_semester "$titles"
     render_html_calendar "$SESSION_KINDS" "$SEMESTER_START_MONDAY" \
         "$NUM_WEEKS" "$RECESS_AFTER_WEEK" "$titles" "$ALLOWLIST" "$LABELS" "$NOTES" \
-        "$PDF_BASE_URL" "$HOLIDAYS" "$EMOJI"
+        "$PDF_BASE_URL" "$HOLIDAYS" "$EMOJI" "$CALENDAR_PALETTE"
     rm -f "$titles"
 }
 

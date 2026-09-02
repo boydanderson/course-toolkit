@@ -73,6 +73,34 @@ for every renderer-specific step.
   an authored/released slot).
 - Source content in whatever format the chosen `RENDERER` expects.
 
+### Customizing the calendar's colors
+
+`cli canvas`'s HTML table has a small default palette (borders, header
+background, an unreleased-item grey, a holiday-cancellation red, the
+Notes column's grey) baked into `core/render-html.sh`. A course
+overrides any subset of it with optional `config/course.mk` keys — unset
+ones keep their default, so a course only needs to specify the colors it
+actually wants to change:
+
+| Key | Controls | Default |
+|---|---|---|
+| `CALENDAR_BORDER_COLOR` | table/cell borders | `#dddddd` |
+| `CALENDAR_HEADER_BG` | header row background | `#eeeeee` |
+| `CALENDAR_LINK_COLOR` | a released item's link | *(unset — inherits the embedding page's own link color, e.g. Canvas's theme)* |
+| `CALENDAR_PENDING_COLOR` | an unreleased item's text | `#888888` |
+| `CALENDAR_CANCELLED_COLOR` | a holiday-cancelled occurrence's text | `#c0392b` |
+| `CALENDAR_NOTES_COLOR` | the Notes column's text | `#555555` |
+
+```
+CALENDAR_BORDER_COLOR = #dddddd
+CALENDAR_LINK_COLOR = #1a5fb4
+```
+
+Only `cli canvas` (the HTML/Canvas renderer) has this concept. `cli
+readme`'s output is plain Markdown — a table meant to render correctly
+wherever Markdown is read (GitHub, a plain-text viewer, ...), so it
+carries no inline styling to make configurable in the first place.
+
 ## Using it
 
 Copy [`examples/Makefile`](examples/Makefile) into your repo root and
