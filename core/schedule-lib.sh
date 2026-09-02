@@ -52,23 +52,8 @@
 # Comment lines (leading #) and blank lines are ignored, same convention
 # as every other .conf file in this ecosystem.
 
-# add_days D N -> D + N calendar days (N may be negative), YYYY-MM-DD in,
-# YYYY-MM-DD out. Same GNU/BSD date branching as course-materials'
-# date-utils.sh (that script's own copy moves into core/ wholesale at
-# Stage 2 -- duplicated here for now so this engine has no Stage-2
-# dependency yet).
-add_days() {
-    local d="$1" n="$2"
-    if date -d "$d" '+%Y-%m-%d' >/dev/null 2>&1; then
-        date -d "$d $n days" '+%Y-%m-%d'
-    else
-        if [[ "$n" =~ ^- ]]; then
-            date -j -v"${n}d" -f "%Y-%m-%d" "$d" '+%Y-%m-%d'
-        else
-            date -j -v+"${n}d" -f "%Y-%m-%d" "$d" '+%Y-%m-%d'
-        fi
-    fi
-}
+SCHEDULE_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCHEDULE_LIB_DIR/date-lib.sh"
 
 # weekday_offset NAME -> 0-6 (Monday=0 .. Sunday=6), or empty + nonzero
 # exit if NAME isn't recognized. NAME is case-insensitive.
