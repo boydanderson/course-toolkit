@@ -75,30 +75,32 @@ for every renderer-specific step.
 
 ## Using it
 
-Set `TOOLKIT_DIR` (this submodule's path) and `COURSE_ROOT` (the
-consuming repo's root) as environment variables, then source the
-`core/*.sh` libraries you need:
+Copy [`examples/Makefile`](examples/Makefile) into your repo root and
+adjust its config-file variable overrides to match your setup. It calls
+[`core/cli.sh`](core/cli.sh), the toolkit's command-line entry point:
 
 ```bash
-export TOOLKIT_DIR=tooling
-export COURSE_ROOT=.
-source "$TOOLKIT_DIR/core/course-lib.sh"
-source "$TOOLKIT_DIR/core/schedule-lib.sh"
-source "$TOOLKIT_DIR/core/semester-lib.sh"
-source "$TOOLKIT_DIR/core/version-lib.sh"
-source "$TOOLKIT_DIR/core/backend-lib.sh"
-source "$TOOLKIT_DIR/core/enrich-lib.sh"
-source "$TOOLKIT_DIR/core/render-markdown.sh"   # or render-html.sh
-export RENDERER="$(get_course_var RENDERER)"
+tooling/core/cli.sh build          # walk the semester, track versions
+tooling/core/cli.sh build --pdfs   # also actually compile every PDF
+tooling/core/cli.sh readme          # print a markdown calendar table
+tooling/core/cli.sh canvas           # print an HTML calendar table
+tooling/core/cli.sh bump SLOT_ID VARIANT
 ```
 
-From there: `semester_weeks` walks the teaching calendar,
-`week_occurrences` gives you each week's scheduled slots,
-`backend_build_slot`/`backend_content_hash`/`backend_extract_title`
-dispatch into the chosen renderer, `get_slot_version`/`bump_slot_version`
-track versions, and `render_markdown_calendar`/`render_html_calendar`
-produce the calendar tables (see each function's own header comment for
-its full argument list).
+See `cli.sh`'s own header comment for the full config-file contract
+(defaults and environment-variable overrides). [`AGENTS.md`](AGENTS.md)
+is a step-by-step checklist for wiring a new course repo up to this —
+useful whether a human or an AI agent is doing the wiring.
+
+For lower-level access than the CLI gives you, source the `core/*.sh`
+libraries directly (set `TOOLKIT_DIR`/`COURSE_ROOT` first): `semester_weeks`
+walks the teaching calendar, `week_occurrences` gives you each week's
+scheduled slots, `backend_build_slot`/`backend_content_hash`/
+`backend_extract_title` dispatch into the chosen renderer,
+`get_slot_version`/`bump_slot_version` track versions, and
+`render_markdown_calendar`/`render_html_calendar` produce the calendar
+tables — see each function's own header comment for its full argument
+list, or read `cli.sh` itself for a complete worked example.
 
 ## Renderer backend contract
 
