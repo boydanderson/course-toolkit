@@ -27,7 +27,7 @@
 # occurrence -- a kind with N occurrences/week, e.g. two lectures, gets N
 # rows sharing the same KIND_ID):
 #
-#   KIND_ID|LABEL|WEEKDAY|SUFFIX|SLOT_PATTERN|VARIANTS|WEEK_START|WEEK_END
+#   KIND_ID|LABEL|WEEKDAY|SUFFIX|SLOT_PATTERN|VARIANTS|WEEK_START|WEEK_END|EXCLUDE_WEEKS
 #
 #   KIND_ID       short id, e.g. "lecture", "studio", "recitation"
 #   LABEL         display name, e.g. "Lecture"
@@ -48,6 +48,10 @@
 #   WEEK_END      teaching-week bounds this occurrence is active for
 #                 (inclusive); a kind that runs the whole semester repeats
 #                 the same bounds on every one of its occurrence rows.
+#   EXCLUDE_WEEKS optional (omit the field, or use "-"): comma-separated
+#                 teaching week numbers this occurrence is skipped even
+#                 though it's within WEEK_START..WEEK_END, e.g. "4,6,8"
+#                 for weeks displaced by assessments/holidays.
 #
 # Comment lines (leading #) and blank lines are ignored, same convention
 # as every other .conf file in this ecosystem.
@@ -95,17 +99,35 @@ format_slot_id() {
 #   KIND_ID|LABEL|SLOT_ID|DATE|WEEKDAY|SUFFIX|VARIANTS
 #
 # A row is "active" for TEACHING_WEEK when WEEK_START <= TEACHING_WEEK <=
-# WEEK_END. Multiple occurrences of the same KIND_ID (e.g. two lectures/
-# week) each produce their own line, distinguished by SUFFIX/SLOT_ID.
+# WEEK_END AND TEACHING_WEEK isn't listed in the row's optional 9th field,
+# EXCLUDE_WEEKS (comma-separated teaching week numbers, e.g. "4,6,8" --
+# omit the field entirely, or leave it "-", for "no exceptions"). This is
+# for the common real-world case a plain range can't express: a lecture
+# kind that meets almost every week except a handful displaced by
+# assessments/holidays on specific weeks -- rather than forcing that
+# irregularity into several adjacent WEEK_START/WEEK_END row-splits.
+# What shows in an excluded week's now-empty cell (e.g. an assessment
+# callout) is a maintainer-supplied label override
+# (enrich-lib.sh's slot_kind_label), same mechanism as any other week
+# with no occurrence -- this list only says "skip the regular occurrence
+# here," it doesn't itself know or care why.
+#
+# Multiple occurrences of the same KIND_ID (e.g. two lectures/week) each
+# produce their own line, distinguished by SUFFIX/SLOT_ID.
 week_occurrences() {
     local conf_file="$1" week_monday="$2" teaching_week="$3"
-    local line kind_id label weekday suffix slot_pattern variants week_start week_end
+    local line kind_id label weekday suffix slot_pattern variants week_start week_end exclude_weeks
     local date slot_id
-    while IFS='|' read -r kind_id label weekday suffix slot_pattern variants week_start week_end; do
+    while IFS='|' read -r kind_id label weekday suffix slot_pattern variants week_start week_end exclude_weeks; do
         [ -z "$kind_id" ] && continue
         case "$kind_id" in \#*) continue ;; esac
         if [ "$teaching_week" -lt "$week_start" ] || [ "$teaching_week" -gt "$week_end" ]; then
             continue
+        fi
+        if [ -n "$exclude_weeks" ] && [ "$exclude_weeks" != "-" ]; then
+            case ",${exclude_weeks}," in
+                *",${teaching_week},"*) continue ;;
+            esac
         fi
         date="$(occurrence_date "$week_monday" "$weekday")" || {
             echo "week_occurrences: bad weekday '$weekday' for kind '$kind_id'" >&2
