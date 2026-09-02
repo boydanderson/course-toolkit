@@ -26,9 +26,14 @@
 #       files, not just SOURCE_PATH itself; SLOT_ID matters too for a
 #       backend that substitutes it into the source, like latex-beamer's
 #       PLACEHOLDER_SLOT).
-#   extract-title.sh SOURCE_PATH
+#   extract-title.sh SOURCE_PATH [SLOT_ID]
 #       Print the slot's display title (empty if none), for calendar/
-#       Canvas-page text.
+#       Canvas-page text. SLOT_ID (optional): apply the same
+#       PLACEHOLDER_SLOT-style substitution build-slot.sh would, so the
+#       displayed title matches what actually got compiled -- extracting
+#       from the raw, unsubstituted source otherwise leaves the literal
+#       placeholder text in the calendar/Canvas table even after
+#       build-slot.sh fixes the PDF itself.
 #
 # See backends/test/ for a minimal reference implementation (no real
 # rendering -- useful as a template and for exercising this dispatcher
@@ -63,7 +68,7 @@ backend_content_hash() {
 }
 
 backend_extract_title() {
-    local source_path="$1" script
+    local source_path="$1" slot_id="${2:-}" script
     script="$(_backend_script extract-title.sh)" || return 1
-    "$script" "$source_path"
+    "$script" "$source_path" "$slot_id"
 }
