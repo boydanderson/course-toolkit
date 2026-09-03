@@ -114,8 +114,13 @@ for every renderer-specific step.
   If a kind has more real content than eligible weeks (several holidays
   eating into a fixed-length term), that's a hard stop, not a silent
   drop or a silently-extended term — `core/schedule-lib.sh`'s
-  `available_slot_count` reports how many eligible weeks a row actually
-  has; a course's own build step compares that against its real
+  `available_slot_count CONF_FILE KIND_ID THROUGH_WEEK [HOLIDAYS_FILE]
+  [START_MONDAY] [RECESS_AFTER_WEEK]` reports how many eligible
+  occurrences exist through a given week, merged across every row
+  sharing that `KIND_ID` (the same merge `{count}` itself already does —
+  a two-row kind like epp2's Session1/Session2 studio shares one running
+  sequence, so this is inherently a whole-kind question, not a per-row
+  one); a course's own build step compares that against its real
   authored-content count and errors out itself (the toolkit only reports
   the number, since it has no way to know how much content a course has
   authored — that's course-specific: a directory of files, a content

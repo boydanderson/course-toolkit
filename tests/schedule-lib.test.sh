@@ -249,18 +249,40 @@ studio|B|Thu-Fri (Studio B)" "$out"
         "$out" "S2|"
     rm -f "$ash_recess_conf" "$ash_recess_holidays"
 
-    # available_slot_count: how many eligible weeks exist for a row,
-    # within its own WEEK_START..WEEK_END -- a course's own build step
-    # compares this against real authored content count and errors out
-    # itself if content doesn't fit; this function only reports the
-    # number. $ash_conf (studio|mon|-, WEEK_END=3, AUTO_SHIFT_ON_HOLIDAY)
-    # + $ash_holidays (holiday on week 2's Monday) are still in scope.
-    assert_eq "available_slot_count: 3-week row with 1 holiday-colliding week = 2 eligible" \
-        "2" "$(available_slot_count "$ash_conf" studio mon - "$ash_holidays" 2026-08-10 0)"
+    # available_slot_count: how many eligible occurrences exist for a
+    # KIND_ID through a given week, merged across every row sharing that
+    # KIND_ID -- a course's own build step compares this against real
+    # authored content count and errors out itself if content doesn't
+    # fit; this function only reports the number. $ash_conf (a single
+    # studio|mon|- row, WEEK_END=3, AUTO_SHIFT_ON_HOLIDAY) + $ash_holidays
+    # (holiday on week 2's Monday) are still in scope.
+    assert_eq "available_slot_count: 3-week kind with 1 holiday-colliding week = 2 eligible" \
+        "2" "$(available_slot_count "$ash_conf" studio 3 "$ash_holidays" 2026-08-10 0)"
     assert_eq "available_slot_count: no HOLIDAYS_FILE given, holiday never checked, all 3 eligible" \
-        "3" "$(available_slot_count "$ash_conf" studio mon - "" 2026-08-10 0)"
-    assert_eq "available_slot_count: no matching row for this KIND_ID/WEEKDAY/SUFFIX is 0" \
-        "0" "$(available_slot_count "$ash_conf" studio thu - "$ash_holidays" 2026-08-10 0)"
+        "3" "$(available_slot_count "$ash_conf" studio 3 "" 2026-08-10 0)"
+    assert_eq "available_slot_count: no rows for this KIND_ID is 0" \
+        "0" "$(available_slot_count "$ash_conf" reflection 3 "$ash_holidays" 2026-08-10 0)"
+    assert_eq "available_slot_count: THROUGH_WEEK before any eligible week is 0" \
+        "0" "$(available_slot_count "$ash_conf" studio 0 "$ash_holidays" 2026-08-10 0)"
+
+    # Real regression: a KIND_ID with TWO rows sharing one merged
+    # {count} sequence (epp2-toolkit-poc's real studio shape -- Session1/
+    # Session2) -- confirmed for real that an earlier, per-ROW version of
+    # this function silently returned the right answer only by
+    # coincidence (when the queried row happened to be excluded/holiday-
+    # colliding exactly at its own WEEK_END) and a wrong one otherwise.
+    # mon/A: weeks 1,3 eligible (week 2 holiday-collides) = 2. thu/B: all
+    # of weeks 1-3 eligible = 3. Merged in (week, row-order) sequence:
+    # w1(mon)=1, w1(thu)=2, w2(mon)=skip, w2(thu)=3, w3(mon)=4, w3(thu)=5.
+    local ash_multirow_conf
+    ash_multirow_conf="$(mktemp)"
+    {
+        printf 'studio|Studio|mon|A|Studio{count}|instructor,student|1|3|-|-|-|1\n'
+        printf 'studio|Studio|thu|B|Studio{count}|instructor,student|1|3|-\n'
+    } > "$ash_multirow_conf"
+    assert_eq "available_slot_count: merged total across two rows sharing one KIND_ID" \
+        "5" "$(available_slot_count "$ash_multirow_conf" studio 3 "$ash_holidays" 2026-08-10 0)"
+    rm -f "$ash_multirow_conf"
 
     rm -f "$ash_conf" "$ash_holidays"
 

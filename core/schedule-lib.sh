@@ -346,14 +346,17 @@ week_occurrences() {
     done < <(grep -vE '^\s*#|^\s*$' "$conf_file")
 }
 
-# available_slot_count CONF_FILE KIND_ID WEEKDAY SUFFIX [HOLIDAYS_FILE]
-# [START_MONDAY] [RECESS_AFTER_WEEK] -> how many eligible weeks exist for
-# the one row matching (KIND_ID, WEEKDAY, SUFFIX), within its own
-# WEEK_START..WEEK_END range -- "eligible" meaning the same rule
-# occurrence_count/week_occurrences already use: not in EXCLUDE_WEEKS,
-# and (only if that row's AUTO_SHIFT_ON_HOLIDAY is set, and
-# HOLIDAYS_FILE/START_MONDAY are given) not holiday-colliding either. 0
-# if no matching row exists.
+# available_slot_count CONF_FILE KIND_ID THROUGH_WEEK [HOLIDAYS_FILE]
+# [START_MONDAY] [RECESS_AFTER_WEEK] -> how many eligible occurrences
+# exist for KIND_ID from week 1 through THROUGH_WEEK, merged across
+# EVERY row sharing that KIND_ID (the same merge {count}/occurrence_count
+# already do -- a kind with two weekly rows, e.g. epp2's Session1/
+# Session2, shares one running sequence, so "how many slots does this
+# kind have" is inherently a whole-kind question, not a per-row one).
+# "Eligible" means the same rule occurrence_count/week_occurrences
+# already use: not in EXCLUDE_WEEKS, and (only for a row with
+# AUTO_SHIFT_ON_HOLIDAY set, and HOLIDAYS_FILE/START_MONDAY given) not
+# holiday-colliding either.
 #
 # Schedule-lib.sh only knows how many *weeks* are available -- it has no
 # idea how much real content a course has authored for a kind (that
@@ -364,31 +367,23 @@ week_occurrences() {
 # this function only ever reports the slot count, never does that
 # comparison or raises that error itself.
 #
-# Implemented as a thin wrapper around occurrence_count: calling it with
-# TARGET_WEEK = the row's own WEEK_END and asking for a
-# (week, weekday, suffix) triple that's never going to exactly match
-# WEEK_END's own row (a real occurrence at week=WEEK_END would only
-# "return early" from occurrence_count if it happens to still be
-# eligible there) relies on occurrence_count's own fallback: if the
-# early-return match never fires, it still returns the accumulated
-# total count of every eligible week from 1 through TARGET_WEEK once its
-# scan completes -- exactly "how many eligible slots exist for this row
-# through its own WEEK_END," regardless of whether WEEK_END itself
-# happens to be excluded or holiday-colliding.
+# Implemented as occurrence_count with a (weekday, suffix) target that
+# can never match any real row -- guaranteeing its early-return branch
+# never fires, so it always falls through to the accumulated total
+# count of every eligible occurrence (merged across every row sharing
+# KIND_ID) from week 1 through THROUGH_WEEK. Earlier versions of this
+# function took a (WEEKDAY, SUFFIX) pair and asked for one row's own
+# count, which was wrong for a multi-row kind: occurrence_count's count
+# is already merged across every row sharing KIND_ID by design, so a
+# per-row query returned that same merged total (right answer, by
+# accident) only when the queried row happened to be inactive/excluded
+# exactly at its own WEEK_END -- silently wrong otherwise. Found for
+# real against epp2-toolkit-poc's own two-row studio kind.
 available_slot_count() {
-    local conf_file="$1" kind_id="$2" weekday="$3" suffix="$4"
-    local holidays_file="${5:-}" start_monday="${6:-}" recess_after_week="${7:-}"
-    local k l w s sp v ws we ew dl cew ashw
-    while IFS='|' read -r k l w s sp v ws we ew dl cew ashw; do
-        [ -z "$k" ] && continue
-        case "$k" in \#*) continue ;; esac
-        if [ "$k" = "$kind_id" ] && [ "$w" = "$weekday" ] && [ "$s" = "$suffix" ]; then
-            occurrence_count "$conf_file" "$kind_id" "$we" "$weekday" "$suffix" \
-                "$holidays_file" "$start_monday" "$recess_after_week"
-            return 0
-        fi
-    done < <(grep -vE '^\s*#|^\s*$' "$conf_file")
-    echo 0
+    local conf_file="$1" kind_id="$2" through_week="$3"
+    local holidays_file="${4:-}" start_monday="${5:-}" recess_after_week="${6:-}"
+    occurrence_count "$conf_file" "$kind_id" "$through_week" "__available_slot_count_no_match__" "__no_match__" \
+        "$holidays_file" "$start_monday" "$recess_after_week"
 }
 
 # weekday_full_name NAME -> "Monday".."Sunday", or empty + nonzero exit
