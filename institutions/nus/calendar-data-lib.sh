@@ -15,6 +15,9 @@
 #   fetch_sg_holidays_dynamic [year...]    - populates SG_HOLIDAYS array
 #   fetch_nus_calendar_dynamic [acad_year] - populates NUS_SPECIAL_DATES array;
 #                                            also merges NUS-specific holidays into SG_HOLIDAYS
+#   nus_recess_after_week SEMESTER_START_MONDAY - the teaching week
+#                                            number a fetched recess follows (0
+#                                            if none), from NUS_SPECIAL_DATES
 #
 # Fetch functions return 0 on success, 1 on failure.
 # See fetch-calendar-data.sh for the orchestrator that turns this into a
@@ -25,6 +28,9 @@
 #   DATA_GOV_SG_API_KEY   - API key for data.gov.sg (reduces rate limiting).
 #                           Register at https://data.gov.sg to obtain a key.
 #   NUS_CALENDAR_PDF_URL  - Override URL for the NUS academic calendar PDF.
+
+CALENDAR_DATA_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$CALENDAR_DATA_LIB_DIR/../../core/date-lib.sh"
 
 fetch_sg_holidays_dynamic() {
     if ! command -v curl &>/dev/null; then
@@ -218,6 +224,87 @@ fetch_nus_calendar_dynamic() {
 
     echo " - Fetched ${#NUS_SPECIAL_DATES[@]} NUS calendar dates + ${nus_holidays_count} NUS-specific holidays from ${pdf_url}" >&2
     return 0
+}
+
+# nus_recess_after_week SEMESTER_START_MONDAY -> the teaching week
+# number a real, fetched recess follows (0 if none), computed from the
+# already-populated NUS_SPECIAL_DATES array (fetch_nus_calendar_dynamic
+# or load_calendar_data_cache). Ported from cs1101s/course-materials'
+# own get_recess_week_number -- kept as an auto-derivation (recomputed
+# fresh from the real fetched calendar every call) rather than a
+# manually-maintained static number, since a course wants its recess
+# placement to self-update when the fetched NUS calendar data does.
+#
+# Generalized to take a Monday anchor (SEMESTER_START_MONDAY, matching
+# every other toolkit convention) instead of the original's
+# Wednesday-anchored start date -- both give identical results: a Monday
+# and Wednesday of the same calendar week 1 are always exactly 2 days
+# apart, which integer week-division always absorbs without shifting
+# the answer (any two Wednesdays are always a whole number of weeks
+# apart, so start_wed + 7*k lands exactly on recess_wed for some
+# integer k -- the loop below just counts that k).
+#
+# Finds the earliest "Recess Week" entry, snaps it to that same NUS
+# week's Wednesday (matching how the NUS calendar table's own week
+# boundaries fall -- a recess starting anywhere Mon-Wed snaps forward to
+# that week's Wednesday, Thu-Sun snaps forward to the FOLLOWING week's
+# Wednesday), then counts how many full weeks separate it from
+# SEMESTER_START_MONDAY's own Wednesday -- that's the calendar week
+# recess falls IN; the teaching week it follows is one less.
+nus_recess_after_week() {
+    local start_monday="$1"
+    local recess_start="" special special_date special_name
+    # "${arr[@]}" on a genuinely empty array is unset, not
+    # empty-string-with-zero-elements, under bash's nounset in some
+    # versions (confirmed for real, same trap already hit and fixed
+    # once in core/render-html.sh's _calendar_palette) -- guard with
+    # :- so an empty NUS_SPECIAL_DATES (no fetch run yet, or a semester
+    # with no recess) is a normal zero-iteration loop, not a crash.
+    for special in "${NUS_SPECIAL_DATES[@]:-}"; do
+        [ -z "$special" ] && continue
+        special_date="${special%%|*}"
+        special_name="${special##*|}"
+        if [ "$special_name" = "Recess Week" ]; then
+            if [ -z "$recess_start" ] || [ "$special_date" \< "$recess_start" ]; then
+                recess_start="$special_date"
+            fi
+        fi
+    done
+    if [ -z "$recess_start" ]; then
+        echo 0
+        return 0
+    fi
+
+    local recess_day
+    recess_day=$(date -d "$recess_start" '+%u' 2>/dev/null || date -j -f "%Y-%m-%d" "$recess_start" '+%u' 2>/dev/null)
+    local recess_wed
+    if [ "$recess_day" -le 3 ]; then
+        recess_wed="$(add_days "$recess_start" "$((3 - recess_day))")"
+    else
+        recess_wed="$(add_days "$recess_start" "$((10 - recess_day))")"
+    fi
+
+    local start_wed
+    start_wed="$(add_days "$start_monday" 2)"
+    if [[ "$recess_wed" < "$start_wed" ]]; then
+        # Recess predates this semester's own start -- not this
+        # semester's recess (stale/mismatched cache), nothing sane to
+        # report.
+        echo 0
+        return 0
+    fi
+
+    local cursor="$start_wed" week_num=1
+    while [ "$cursor" != "$recess_wed" ]; do
+        cursor="$(add_days "$cursor" 7)"
+        week_num=$((week_num + 1))
+        if [ "$week_num" -gt 60 ]; then
+            echo 0
+            return 1
+        fi
+    done
+
+    echo $((week_num - 1))
 }
 
 fetch_nusmods_exam_dynamic() {
