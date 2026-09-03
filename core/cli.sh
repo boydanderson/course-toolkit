@@ -78,6 +78,12 @@
 #                          title in readme, shown as independent stacked
 #                          blocks in canvas; see enrich-lib.sh's
 #                          kind_extra_slots)
+#   EXTRA_NOTE_FILE        default: config/extra-notes.conf (optional,
+#                          SLOT_ID|HTML -- canvas only, one more line
+#                          under a regular occurrence's title+links, e.g.
+#                          a course-specific reading-list extraction step
+#                          feeding this file; see enrich-lib.sh's
+#                          extra_note_for_slot)
 #
 # config/course.mk additionally supplies (beyond COURSE_CODE/COURSE_NAME/
 # HOSTING_ORG/CANVAS_HOST/RENDERER, see README):
@@ -134,6 +140,7 @@ EXTRA_LINKS="${EXTRA_LINKS_FILE:-$COURSE_ROOT/config/extra-links.conf}"
 OCCASION_LINKS="${OCCASION_LINKS_FILE:-$COURSE_ROOT/config/occasion-links.conf}"
 GRADED_SLOTS="${GRADED_SLOTS_FILE:-$COURSE_ROOT/config/graded-slots.conf}"
 EXTRA_SLOTS="${EXTRA_SLOTS_FILE:-$COURSE_ROOT/config/kind-extra-slots.conf}"
+EXTRA_NOTE="${EXTRA_NOTE_FILE:-$COURSE_ROOT/config/extra-notes.conf}"
 
 SEMESTER_START_MONDAY="$(get_course_var SEMESTER_START_MONDAY)"
 NUM_WEEKS="$(get_course_var NUM_WEEKS)"
@@ -231,7 +238,7 @@ cmd_canvas() {
     render_html_calendar "$SESSION_KINDS" "$SEMESTER_START_MONDAY" \
         "$NUM_WEEKS" "$RECESS_AFTER_WEEK" "$titles" "$ALLOWLIST" "$LABELS" "$NOTES" \
         "$PDF_BASE_URL" "$HOLIDAYS" "$EMOJI" "$CALENDAR_PALETTE" "" \
-        "$KIND_EXTRA_LINKS" "$EXTRA_LINKS" "$OCCASION_LINKS" "$GRADED_SLOTS" "$EXTRA_SLOTS"
+        "$KIND_EXTRA_LINKS" "$EXTRA_LINKS" "$OCCASION_LINKS" "$GRADED_SLOTS" "$EXTRA_SLOTS" "$EXTRA_NOTE"
     rm -f "$titles"
 
     local key_events

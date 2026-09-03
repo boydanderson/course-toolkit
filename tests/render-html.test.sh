@@ -390,6 +390,21 @@ EOF
     assert_contains "render_html_calendar: EXTRA_SLOTS_FILE threads through end to end" \
         "$out" "S3-in-class: A Title"
 
+    # EXTRA_NOTE_FILE: one more line under a regular occurrence's
+    # title+links, generalizing the SICPy §-section reading-list slot.
+    local en_notes="$scratch/extra-notes.conf"
+    printf 'L4A|<a href="#s1">Section 1.1</a>\n' > "$en_notes"
+    out="$(render_kind_cell_html 4 lecture "$mixed_occ" "$titles" "$allowlist" /dev/null https://x /dev/null /dev/null \
+        "" "" "" "" "" "" "" "$en_notes")"
+    assert_contains "extra note line appears when set" "$out" '<a href="#s1">Section 1.1</a>'
+
+    out="$(render_kind_cell_html 4 lecture "$mixed_occ" "$titles" "$allowlist" /dev/null https://x /dev/null /dev/null)"
+    assert_not_contains "no extra_note_file: nothing appended" "$out" 'href="#s1"'
+
+    out="$(render_kind_cell_html 4 lecture "$mixed_occ" "$titles" "$allowlist" /dev/null https://x /dev/null /dev/null \
+        "" "" "" "" "" "" "" "$scratch/nope.conf")"
+    assert_not_contains "extra_note_file with no entry for this slot: nothing appended" "$out" 'href="#s1"'
+
     # CANCEL_EXTRA_WEEKDAYS: an occurrence declared mon + "tue" extra
     # must be cancelled by a holiday landing on EITHER day -- HTML side
     # of the same real studio Mon+Tue combined-cell need.

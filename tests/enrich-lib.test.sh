@@ -76,6 +76,16 @@ test_enrich_lib() {
     assert_failure "occurrence_holiday: empty extra_dates behaves exactly like plain is_holiday" \
         occurrence_holiday 2026-10-06 "" "$scratch/holidays.conf"
 
+    # extra_note_for_slot -- generalizes the rendering slot a course-
+    # specific extraction step (e.g. SICPy section links) occupies.
+    printf 'L1A|<a href="#s1">Section 1.1</a>\n' > "$scratch/extra-notes.conf"
+    assert_eq "extra_note_for_slot: match returns the raw HTML" \
+        '<a href="#s1">Section 1.1</a>' "$(extra_note_for_slot L1A "$scratch/extra-notes.conf")"
+    assert_eq "extra_note_for_slot: no match is empty, not an error" "" \
+        "$(extra_note_for_slot L1B "$scratch/extra-notes.conf")"
+    assert_eq "extra_note_for_slot: missing file is empty, not an error" "" \
+        "$(extra_note_for_slot L1A "$scratch/nope.conf")"
+
     # kind_extra_link_label / extra_link_for_slot
     printf 'lecture|Recording\n' > "$scratch/kind-extra-links.conf"
     assert_eq "kind_extra_link_label: match" "Recording" \

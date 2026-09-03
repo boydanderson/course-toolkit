@@ -200,6 +200,16 @@ existing course's output is completely unaffected by their existence:
   Canvas rendering. If the week's real occurrence is holiday-cancelled,
   extra slots are skipped entirely (they ride along with the session
   that didn't happen). See `core/enrich-lib.sh`'s `kind_extra_slots`.
+- **An extra note line per occurrence** (`cli canvas` only — no Markdown
+  equivalent exists to preserve) — generalizes the *rendering slot* a
+  course-specific extraction step can occupy under a regular
+  occurrence's title+links, without the toolkit needing to know how the
+  text was produced (e.g. cs1101s/course-materials' own SICPy
+  §-section reading list, extracted from LaTeX by a course-owned
+  script — that extraction logic stays entirely course-side).
+  `config/extra-notes.conf`, format `SLOT_ID|HTML` — a course feeds it
+  from whatever extraction step it likes, or never creates the file for
+  no extra line at all. See `core/enrich-lib.sh`'s `extra_note_for_slot`.
 
 ## Using it
 

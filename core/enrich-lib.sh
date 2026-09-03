@@ -212,6 +212,24 @@ kind_extra_slots() {
     awk -F'|' -v w="$week" -v k="$kind_id" '$1==w && $2==k {print $3}' "$extra_slots_file"
 }
 
+# extra_note_for_slot SLOT_ID NOTES_FILE -> arbitrary already-rendered
+# HTML/text for this slot, empty if none listed. Format: SLOT_ID|HTML.
+# Generalizes the RENDERING SLOT a course-specific extraction step (e.g.
+# cs1101s/course-materials' scripts/sicpy-sections.py, which parses
+# LaTeX for SICPy `§`-section references) can occupy under a lecture's
+# title+links -- not the extraction itself, which stays entirely course-
+# owned; this function doesn't know or care how the text was produced,
+# same as extra_link_for_slot doesn't know how a Recording URL was
+# obtained. render_kind_cell_html (HTML only -- no markdown equivalent
+# exists to preserve) renders a non-empty result as one more line under
+# the title+links, same shape render_item's own optional third line
+# already used in the original bespoke code this generalizes.
+extra_note_for_slot() {
+    local slot_id="$1" notes_file="$2"
+    [ -f "$notes_file" ] || return 0
+    grep -vE '^\s*#|^\s*$' "$notes_file" | grep "^${slot_id}|" | head -1 | cut -d'|' -f2- || true
+}
+
 # kind_extra_link_label KIND_ID LABELS_FILE -> the label for this kind's
 # optional second link (e.g. "lecture" -> "Recording"), empty if this
 # kind doesn't have one. Format: KIND_ID|LABEL. A course that doesn't
