@@ -100,5 +100,27 @@ EOF
     assert_eq "occasion_links: missing file is empty, not an error" "" \
         "$(occasion_links 4 lecture "$scratch/nope.conf")"
 
+    # week_holiday_notes -- surfaces a holiday even when it doesn't land
+    # on any day this course actually schedules an occurrence (unlike
+    # is_holiday's per-occurrence cancellation above, which only fires
+    # for a date that IS a scheduled occurrence).
+    assert_eq "week_holiday_notes: a holiday on a day mid-week" \
+        "⚠️ Friday: 🧘 NUS Well-Being Day" \
+        "$(week_holiday_notes 2026-10-05 "$scratch/holidays.conf" "$scratch/emoji.conf")"
+    assert_eq "week_holiday_notes: no holiday in this week's span is empty" \
+        "" "$(week_holiday_notes 2026-09-28 "$scratch/holidays.conf" "$scratch/emoji.conf")"
+    assert_eq "week_holiday_notes: missing holidays file is empty, not an error" \
+        "" "$(week_holiday_notes 2026-10-05 "$scratch/nope.conf" "$scratch/emoji.conf")"
+
+    printf '2026-10-06|Deepavali\n2026-10-09|NUS Well-Being Day\n' > "$scratch/multi-holidays.conf"
+    assert_eq "week_holiday_notes: two holidays in one week, joined and in Mon..Sun order" \
+        "⚠️ Tuesday: 🪔 Deepavali; ⚠️ Friday: 🧘 NUS Well-Being Day" \
+        "$(week_holiday_notes 2026-10-05 "$scratch/multi-holidays.conf" "$scratch/emoji.conf")"
+
+    printf '2026-10-06|Not Mapped Holiday\n' > "$scratch/unmapped-holiday.conf"
+    assert_eq "week_holiday_notes: holiday with no emoji mapping still shows, no stray space" \
+        "⚠️ Tuesday: Not Mapped Holiday" \
+        "$(week_holiday_notes 2026-10-05 "$scratch/unmapped-holiday.conf" "$scratch/emoji.conf")"
+
     rm -rf "$scratch"
 }

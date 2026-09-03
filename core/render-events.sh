@@ -8,14 +8,11 @@
 # "nothing to append," same convention as every other optional file in
 # this toolkit.
 
+RENDER_EVENTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$RENDER_EVENTS_DIR/date-lib.sh"
+
 _html_escape_events() {
     sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g'
-}
-
-# _event_day_name DATE -> full weekday name (e.g. "Wednesday"), portable
-# GNU/BSD `date` fallback (same pattern as core/date-lib.sh's own).
-_event_day_name() {
-    date -d "$1" '+%A' 2>/dev/null || date -j -f "%Y-%m-%d" "$1" '+%A' 2>/dev/null
 }
 
 # _sorted_events EVENTS_FILE -> comment/blank-stripped lines, sorted by
@@ -85,6 +82,6 @@ render_key_events_markdown() {
     local date start end name
     while IFS='|' read -r date start end name; do
         [ -z "$date" ] && continue
-        echo "| $date | $(_event_day_name "$date") | $start-$end | $name |"
+        echo "| $date | $(day_of_week_name "$date") | $start-$end | $name |"
     done <<< "$rows"
 }

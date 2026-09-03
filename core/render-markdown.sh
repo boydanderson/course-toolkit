@@ -296,8 +296,14 @@ render_markdown_calendar() {
             cell="$(render_kind_cell "$teaching_week" "$k" "$occ_file" "$titles_file" "$allowlist_file" "$labels_file" "$base_url" "$holidays_file" "$emoji_file" "$extra_label" "$extra_links_file" "$occasion_links_file" "$s" "$graded_file")"
             row="${row} ${cell} |"
         done
-        local note
-        note="$(week_note "$teaching_week" "$notes_file")"
+        local note maintainer_note holiday_note
+        maintainer_note="$(week_note "$teaching_week" "$notes_file")"
+        holiday_note="$(week_holiday_notes "$monday" "$holidays_file" "$emoji_file")"
+        if [ -n "$maintainer_note" ] && [ -n "$holiday_note" ]; then
+            note="${maintainer_note}; ${holiday_note}"
+        else
+            note="${maintainer_note}${holiday_note}"
+        fi
         [ -z "$note" ] && note="-"
         row="${row} ${note} |"
         echo "$row"

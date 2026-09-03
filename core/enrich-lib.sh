@@ -140,6 +140,36 @@ holiday_emoji() {
     ' "$emoji_file"
 }
 
+# week_holiday_notes MONDAY HOLIDAYS_FILE EMOJI_FILE -> "⚠️ <Weekday>:
+# <emoji> <Holiday>" for every day Monday..Sunday of the calendar week
+# starting MONDAY that has a HOLIDAYS_FILE entry, semicolon-joined --
+# empty if none. is_holiday's per-occurrence cancellation (above) only
+# surfaces a holiday when it lands exactly on a day this course actually
+# has a scheduled occurrence; this instead scans the whole week so a
+# holiday landing on a day the course never meets (e.g. a Tuesday) still
+# shows up somewhere. Scans all 7 days, not just Mon-Fri, since a course
+# may schedule a real occurrence on a weekend (e.g. a Saturday quiz).
+week_holiday_notes() {
+    local monday="$1" holidays_file="$2" emoji_file="$3"
+    [ -f "$holidays_file" ] || return 0
+    local lines=() i date dow holiday emoji prefix
+    for ((i = 0; i < 7; i++)); do
+        date="$(add_days "$monday" "$i")"
+        holiday="$(is_holiday "$date" "$holidays_file")" || continue
+        dow="$(day_of_week_name "$date")"
+        emoji="$(holiday_emoji "$holiday" "$emoji_file")"
+        prefix=""
+        [ -n "$emoji" ] && prefix="${emoji} "
+        lines+=("⚠️ ${dow}: ${prefix}${holiday}")
+    done
+    [ ${#lines[@]} -eq 0 ] && return 0
+    local out="${lines[0]}" j
+    for ((j = 1; j < ${#lines[@]}; j++)); do
+        out="${out}; ${lines[$j]}"
+    done
+    echo "$out"
+}
+
 # kind_extra_link_label KIND_ID LABELS_FILE -> the label for this kind's
 # optional second link (e.g. "lecture" -> "Recording"), empty if this
 # kind doesn't have one. Format: KIND_ID|LABEL. A course that doesn't

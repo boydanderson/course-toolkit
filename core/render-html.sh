@@ -366,8 +366,14 @@ render_html_calendar() {
             cell="$(render_kind_cell_html "$teaching_week" "$k" "$occ_file" "$titles_file" "$allowlist_file" "$labels_file" "$base_url" "$holidays_file" "$emoji_file" "$palette" "$extra_label" "$extra_links_file" "$occasion_links_file" "$s" "$graded_file")"
             printf '<td style="%s">%s</td>' "$row_style" "$cell"
         done
-        local note
-        note="$(week_note "$teaching_week" "$notes_file")"
+        local note maintainer_note holiday_note
+        maintainer_note="$(week_note "$teaching_week" "$notes_file")"
+        holiday_note="$(week_holiday_notes "$monday" "$holidays_file" "$emoji_file")"
+        if [ -n "$maintainer_note" ] && [ -n "$holiday_note" ]; then
+            note="${maintainer_note}; ${holiday_note}"
+        else
+            note="${maintainer_note}${holiday_note}"
+        fi
         [ -z "$note" ] && note="-"
         printf '<td style="%sfont-size:0.85rem;color:%s;">%s</td>' "$row_style" "$CAL_NOTES" "$(echo "$note" | _html_escape)"
         echo '</tr>'

@@ -247,5 +247,28 @@ EOF
             /dev/null /dev/null https://x /dev/null /dev/null)" \
         "Recess"
 
+    # week_holiday_notes wired into the Notes column: a holiday that
+    # lands on a day this kind doesn't meet (kinds is wed/fri; Thursday
+    # is neither) must still surface in Notes, not silently disappear
+    # the way is_holiday's per-occurrence cancellation alone would leave
+    # it -- the real gap this was built to close.
+    local nonclass_holidays="$scratch/nonclass-holidays.conf"
+    printf '2026-08-13|Non-Class Holiday\n' > "$nonclass_holidays"
+    out="$(render_markdown_calendar "$kinds" 2026-08-10 1 0 "$titles" "$allowlist" \
+        /dev/null /dev/null https://example.org/pdfs "$nonclass_holidays" "$emoji")"
+    assert_contains "a holiday on a non-class day still shows in Notes" \
+        "$out" "⚠️ Thursday: Non-Class Holiday"
+    assert_contains "a holiday on a non-class day doesn't cancel any occurrence" \
+        "$out" "L1A"
+
+    # Joins with an existing maintainer week_note via "; ", same
+    # separator week_note itself already uses for multiple lines.
+    local week_notes_file="$scratch/week-notes.conf"
+    printf '1|Maintainer note\n' > "$week_notes_file"
+    out="$(render_markdown_calendar "$kinds" 2026-08-10 1 0 "$titles" "$allowlist" \
+        /dev/null "$week_notes_file" https://example.org/pdfs "$nonclass_holidays" "$emoji")"
+    assert_contains "maintainer note and holiday note join with '; '" \
+        "$out" "Maintainer note; ⚠️ Thursday: Non-Class Holiday"
+
     rm -rf "$scratch"
 }

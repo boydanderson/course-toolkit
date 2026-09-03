@@ -41,3 +41,9 @@ sgt_date() {
         date -u -r "$epoch" "$fmt"
     fi
 }
+
+# day_of_week_name DATE -> full weekday name (e.g. "Wednesday"), same
+# GNU/BSD `date` fallback as add_days above.
+day_of_week_name() {
+    date -d "$1" '+%A' 2>/dev/null || date -j -f "%Y-%m-%d" "$1" '+%A' 2>/dev/null
+}

@@ -16,4 +16,9 @@ test_date_lib() {
         "2021-01-01" "$(sgt_date '+%Y-%m-%d' 1609430400)"  # 2020-12-31 16:00 UTC
     assert_eq "sgt_date: format string is honored" \
         "2021" "$(sgt_date '+%Y' 1609459200)"
+
+    assert_eq "day_of_week_name: a known Monday" \
+        "Monday" "$(day_of_week_name 2026-08-10)"
+    assert_eq "day_of_week_name: a known Sunday" \
+        "Sunday" "$(day_of_week_name 2026-08-16)"
 }

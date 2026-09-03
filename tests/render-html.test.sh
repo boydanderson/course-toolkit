@@ -351,5 +351,25 @@ EOF
             /dev/null /dev/null https://x /dev/null /dev/null)" \
         "Recess"
 
+    # week_holiday_notes wired into the Notes column: a holiday landing
+    # on a day this kind doesn't meet (kinds is wed-only; Thursday isn't)
+    # must still surface in Notes -- same real gap render-markdown.test.sh
+    # covers, HTML side.
+    local nonclass_holidays="$scratch/nonclass-holidays.conf"
+    printf '2026-08-13|Non-Class Holiday\n' > "$nonclass_holidays"
+    out="$(render_html_calendar "$kinds" 2026-08-10 1 0 "$titles" "$allowlist" \
+        /dev/null /dev/null https://example.org/pdfs "$nonclass_holidays" "$emoji")"
+    assert_contains "a holiday on a non-class day still shows in Notes" \
+        "$out" "⚠️ Thursday: Non-Class Holiday"
+    assert_contains "a holiday on a non-class day doesn't cancel any occurrence" \
+        "$out" "L1A"
+
+    local week_notes_file="$scratch/week-notes.conf"
+    printf '1|Maintainer note\n' > "$week_notes_file"
+    out="$(render_html_calendar "$kinds" 2026-08-10 1 0 "$titles" "$allowlist" \
+        /dev/null "$week_notes_file" https://example.org/pdfs "$nonclass_holidays" "$emoji")"
+    assert_contains "maintainer note and holiday note join with '; '" \
+        "$out" "Maintainer note; ⚠️ Thursday: Non-Class Holiday"
+
     rm -rf "$scratch"
 }
