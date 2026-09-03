@@ -45,9 +45,28 @@ EOF
 
     local md
     md="$(render_key_events_markdown "$events")"
-    assert_contains "markdown: header row" "$md" "| Date | Time | Event |"
-    assert_contains "markdown: Sumobot row present" "$md" "2026-10-14 | 18:00-21:00 | Sumobot Competition"
-    assert_contains "markdown: Final Exam row present" "$md" "2026-11-25 | 09:00-11:00 | Final Exam"
+    assert_contains "markdown: header row (incl. Day)" "$md" "| Date | Day | Time | Event |"
+    assert_contains "markdown: Sumobot row present, with its real weekday" \
+        "$md" "2026-10-14 | Wednesday | 18:00-21:00 | Sumobot Competition"
+    assert_contains "markdown: Final Exam row present, with its real weekday" \
+        "$md" "2026-11-25 | Wednesday | 09:00-11:00 | Final Exam"
+
+    # HTML never had a Day column (unlike markdown -- matches
+    # cs1101s/course-materials' own real, asymmetric tables).
+    assert_not_contains "html: no Day column, no weekday text leaking in" \
+        "$html" "Wednesday"
+
+    # Optional PALETTE: BORDER|HEADER_BG|ROW_ODD_BG|ROW_EVEN_BG -- with
+    # no palette (every call above), the table is flat/unstriped; with
+    # one, alternating rows get real background colors, matching
+    # cs1101s/course-materials' own Key Events table styling.
+    local striped
+    striped="$(render_key_events_html "$events" "#cccccc|#f0f0f0|#ffffff|#fafafa")"
+    assert_contains "html palette: header uses the given header_bg" "$striped" "background:#f0f0f0;"
+    assert_contains "html palette: first row uses row_odd_bg" "$striped" "background:#ffffff;"
+    assert_contains "html palette: second row uses row_even_bg" "$striped" "background:#fafafa;"
+    assert_not_contains "html with no palette: no striping background at all" \
+        "$html" "background:#fafafa;"
 
     # A '&'/'<' in an event name must come out escaped in HTML, raw in
     # markdown -- same convention as titles elsewhere in this toolkit.
