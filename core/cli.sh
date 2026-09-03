@@ -54,6 +54,18 @@
 #                          column, e.g. an institution's own academic-
 #                          calendar entries; see enrich-lib.sh's
 #                          week_special_date_notes/week_key_event_notes)
+#   SOURCE_LINKS_FILE     default: config/source-links.conf (optional,
+#                          SLOT_ID|PATH -- `readme` only. A slot with an
+#                          entry renders a single "[source](PATH)" link
+#                          instead of the usual View/Print/Sheet variant
+#                          links, for a course whose calendar links
+#                          straight at its own source repo rather than a
+#                          built PDF; see enrich-lib.sh's
+#                          source_link_for_slot)
+#   HOLIDAY_FIRST         default: unset (optional, any non-empty value
+#                          -- `readme` only). Swaps the holiday-
+#                          cancellation phrase order from "No <Kind>
+#                          (<holiday>)" to "<holiday> (No <Kind>)".
 #   RESOURCES_HTML_FILE   default: config/canvas-resources.html (optional
 #                          -- appended verbatim under a "Resources"
 #                          heading in `canvas`'s output)
@@ -142,6 +154,8 @@ HOLIDAYS="${HOLIDAYS_FILE:-$COURSE_ROOT/config/holidays.conf}"
 EMOJI="${EMOJI_FILE:-$COURSE_ROOT/config/holiday-emoji.conf}"
 KEY_EVENTS="${KEY_EVENTS_FILE:-$COURSE_ROOT/config/key-events.conf}"
 SPECIAL_DATES="${SPECIAL_DATES_FILE:-$COURSE_ROOT/config/special-dates.conf}"
+SOURCE_LINKS="${SOURCE_LINKS_FILE:-$COURSE_ROOT/config/source-links.conf}"
+HOLIDAY_FIRST="${HOLIDAY_FIRST:-}"
 RESOURCES_HTML="${RESOURCES_HTML_FILE:-$COURSE_ROOT/config/canvas-resources.html}"
 RESOURCES_MD="${RESOURCES_MD_FILE:-$COURSE_ROOT/config/readme-resources.md}"
 KIND_EXTRA_LINKS="${KIND_EXTRA_LINKS_FILE:-$COURSE_ROOT/config/kind-extra-links.conf}"
@@ -219,7 +233,7 @@ cmd_readme() {
     render_markdown_calendar "$SESSION_KINDS" "$SEMESTER_START_MONDAY" \
         "$NUM_WEEKS" "$RECESS_AFTER_WEEK" "$titles" "$ALLOWLIST" "$LABELS" "$NOTES" \
         "$PDF_BASE_URL" "$HOLIDAYS" "$EMOJI" "$KIND_EXTRA_LINKS" "$EXTRA_LINKS" "$OCCASION_LINKS" "$GRADED_SLOTS" "$EXTRA_SLOTS" \
-        "$SPECIAL_DATES" "$KEY_EVENTS"
+        "$SPECIAL_DATES" "$KEY_EVENTS" "$SOURCE_LINKS" "$HOLIDAY_FIRST"
     rm -f "$titles"
 
     local key_events

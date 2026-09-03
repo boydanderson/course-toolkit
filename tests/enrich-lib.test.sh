@@ -103,6 +103,14 @@ test_enrich_lib() {
     assert_eq "extra_link_for_slot: missing file is empty, not an error" "" \
         "$(extra_link_for_slot L1A "$scratch/nope.conf")"
 
+    printf 'L1A|src/lectures/lecture-1.tex\n' > "$scratch/source-links.conf"
+    assert_eq "source_link_for_slot: match" "src/lectures/lecture-1.tex" \
+        "$(source_link_for_slot L1A "$scratch/source-links.conf")"
+    assert_eq "source_link_for_slot: not-yet-listed slot is empty, not an error" "" \
+        "$(source_link_for_slot L1B "$scratch/source-links.conf")"
+    assert_eq "source_link_for_slot: missing file is empty, not an error" "" \
+        "$(source_link_for_slot L1A "$scratch/nope.conf")"
+
     # occasion_links -- note the occasion's own title ("Reading
     # Assessment 1") lives in labels_file/slot_kind_label, a separate
     # lookup; this file's own fields are LINK labels ("Details",

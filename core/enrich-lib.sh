@@ -295,6 +295,20 @@ kind_extra_link_label() {
     grep -vE '^\s*#|^\s*$' "$labels_file" | grep "^${kind_id}|" | head -1 | cut -d'|' -f2- || true
 }
 
+# source_link_for_slot SLOT_ID SOURCE_LINKS_FILE -> the path/URL a slot's
+# source-link cell should point at, empty if none listed. Format:
+# SLOT_ID|PATH, identical shape to extra_link_for_slot. For a course
+# whose calendar table links straight at its own source repo (e.g. a
+# .tex file on GitHub) rather than a built PDF variant -- see render-
+# markdown.sh's render_kind_cell, which renders a single "[source](PATH)"
+# link instead of the usual View/Print/Sheet variant links when this is
+# set for a slot.
+source_link_for_slot() {
+    local slot_id="$1" source_links_file="$2"
+    [ -f "$source_links_file" ] || return 0
+    grep -vE '^\s*#|^\s*$' "$source_links_file" | grep "^${slot_id}|" | head -1 | cut -d'|' -f2- || true
+}
+
 # extra_link_for_slot SLOT_ID LINKS_FILE -> the URL for this slot's
 # extra link, empty if none listed yet (renders as a pending/greyed
 # label rather than a live link -- same "no date/timing logic, just

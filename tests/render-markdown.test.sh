@@ -368,5 +368,70 @@ EOF
     assert_not_contains "no special_dates_file/key_events_file: no stray categories appear" \
         "$out" "📅"
 
+    # SOURCE_LINKS_FILE: a course whose calendar links straight at its
+    # own source repo (a .tex file on GitHub) rather than a built PDF
+    # variant -- render_kind_cell's 16th positional param.
+    local sl_occ="$scratch/sl-occurrences.tsv"
+    printf 'lecture|Lecture|L1A|2026-08-12|wed|A|view,print\n' > "$sl_occ"
+    local sl_titles="$scratch/sl-titles.conf"
+    printf 'L1A|A Real Title\n' > "$sl_titles"
+    local sl_sources="$scratch/sl-sources.conf"
+    printf 'L1A|src/lectures/lecture-1.tex\n' > "$sl_sources"
+    out="$(render_kind_cell 1 lecture "$sl_occ" "$sl_titles" /dev/null /dev/null https://x /dev/null /dev/null \
+        "" "" "" "" "" "" "$sl_sources")"
+    assert_contains "SOURCE_LINKS_FILE: a listed slot gets a single [source](path) link" \
+        "$out" "[source](src/lectures/lecture-1.tex)"
+    assert_not_contains "SOURCE_LINKS_FILE: no View/Print variant links when a source link is used" \
+        "$out" "View"
+
+    local sl_titles2="$scratch/sl-titles2.conf"
+    printf 'L2A|Another Title\n' > "$sl_titles2"
+    local sl_occ2="$scratch/sl-occurrences2.tsv"
+    printf 'lecture|Lecture|L2A|2026-08-19|wed|A|view,print\n' > "$sl_occ2"
+    out="$(render_kind_cell 2 lecture "$sl_occ2" "$sl_titles2" /dev/null /dev/null https://x /dev/null /dev/null \
+        "" "" "" "" "" "" "$sl_sources")"
+    assert_contains "SOURCE_LINKS_FILE: a slot with no entry falls through to normal variant links" \
+        "$out" "View"
+    assert_not_contains "SOURCE_LINKS_FILE: falls through cleanly, no stray [source] text" \
+        "$out" "[source]"
+
+    # SOURCE_LINKS_FILE combined with Stage 8's extra-slot grouping: each
+    # contributing slot in a merged group gets its own source link.
+    local sl_extra="$scratch/sl-extra.conf"
+    printf '3|studio|S3-in-class\n' > "$sl_extra"
+    local sl_studio_occ="$scratch/sl-studio-occurrences.tsv"
+    printf 'studio|Studio|S3|2026-08-24|mon|-|view,print\n' > "$sl_studio_occ"
+    local sl_studio_titles="$scratch/sl-studio-titles.conf"
+    printf 'S3|A Title\nS3-in-class|A Title\n' > "$sl_studio_titles"
+    local sl_studio_sources="$scratch/sl-studio-sources.conf"
+    printf 'S3|src/studios/studio-S3.tex\nS3-in-class|src/studios/studio-S3-in-class.tex\n' > "$sl_studio_sources"
+    out="$(render_kind_cell 3 studio "$sl_studio_occ" "$sl_studio_titles" /dev/null /dev/null https://x /dev/null /dev/null \
+        "" "" "" "" "" "$sl_extra" "$sl_studio_sources")"
+    assert_contains "SOURCE_LINKS_FILE + grouping: primary slot's source link" \
+        "$out" "[source](src/studios/studio-S3.tex)"
+    assert_contains "SOURCE_LINKS_FILE + grouping: extra slot's source link" \
+        "$out" "[source](src/studios/studio-S3-in-class.tex)"
+
+    # HOLIDAY_FIRST: swaps the cancellation phrase order -- 17th param.
+    local hf_holidays="$scratch/hf-holidays.conf"
+    printf '2026-08-12|Test Holiday\n' > "$hf_holidays"
+    out="$(render_kind_cell 1 lecture "$sl_occ" "$sl_titles" /dev/null /dev/null https://x "$hf_holidays" /dev/null)"
+    assert_contains "HOLIDAY_FIRST unset: today's default phrase order" \
+        "$out" "No Lecture (Test Holiday)"
+    out="$(render_kind_cell 1 lecture "$sl_occ" "$sl_titles" /dev/null /dev/null https://x "$hf_holidays" /dev/null \
+        "" "" "" "" "" "" "" "1")"
+    assert_contains "HOLIDAY_FIRST set: holiday-name-first phrase order" \
+        "$out" "Test Holiday (No Lecture)"
+
+    # render_markdown_calendar end to end: SOURCE_LINKS_FILE (19th) and
+    # HOLIDAY_FIRST (20th) thread through to render_kind_cell.
+    local sl_kinds="$scratch/sl-kinds.conf"
+    printf 'lecture|Lecture|wed|A|L{n}{suffix}|view,print|1|13|-\n' > "$sl_kinds"
+    out="$(render_markdown_calendar "$sl_kinds" 2026-08-10 1 0 "$sl_titles" /dev/null \
+        /dev/null /dev/null https://x "$hf_holidays" /dev/null "" "" "" "" "" "" "" \
+        "$sl_sources" "1")"
+    assert_contains "render_markdown_calendar: HOLIDAY_FIRST threads through end to end" \
+        "$out" "Test Holiday (No Lecture)"
+
     rm -rf "$scratch"
 }

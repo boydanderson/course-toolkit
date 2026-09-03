@@ -156,6 +156,20 @@ existing course's output is completely unaffected by their existence:
   append in a fixed order (maintainer note, holidays, special dates, key
   events), not interleaved by day. See `core/enrich-lib.sh`'s
   `week_special_date_notes`/`week_key_event_notes`.
+- **Source-repo links instead of built-PDF links** (`cli readme` only)
+  — a course whose calendar table should link straight at its own
+  source (e.g. a `.tex` file on GitHub) rather than a built PDF variant.
+  `config/source-links.conf`, format `SLOT_ID|PATH`. A listed slot
+  renders a single `[source](PATH)` link instead of the usual View/
+  Print/Sheet variant links; a slot with no entry falls through to the
+  normal variant links unaffected. Works with the extra-per-week-slots
+  grouping above — each contributing slot in a merged group gets its
+  own source link. See `core/enrich-lib.sh`'s `source_link_for_slot`.
+- **Configurable holiday-cancellation phrase order** (`cli readme` only)
+  — the default cancellation text is `"No <Kind> (<holiday>)"`; set
+  `HOLIDAY_FIRST` (any non-empty value) to swap it to `"<holiday> (No
+  <Kind>)"` instead. Unset preserves every existing consumer's exact
+  current text.
 - **Public Holidays Reference** — a plain legend table of every holiday
   in `config/holidays.conf` falling inside the semester's own span
   (±7 days). `cli readme` only (markdown; no Canvas/HTML equivalent),
