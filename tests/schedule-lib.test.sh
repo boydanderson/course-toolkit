@@ -67,6 +67,28 @@ studio|B|Thu-Fri (Studio B)" "$out"
         "2026-08-10" "$(week_occurrences "$dl_conf" 2026-08-10 1 | head -1 | cut -d'|' -f4)"
     rm -f "$dl_conf"
 
+    # Regression: a real bug found via epp2-toolkit-poc -- DAY_LABEL
+    # (the 10th field) silently got absorbed into EXCLUDE_WEEKS by
+    # occurrence_count's own row parser (only week_occurrences/
+    # kind_suffixes were updated to expect a 10th field, not this one),
+    # which broke the EXCLUDE_WEEKS match entirely and threw {count}'s
+    # numbering off by one from the point of the first exclusion onward.
+    # Combines {count} + EXCLUDE_WEEKS + DAY_LABEL on the same rows,
+    # which no other test above does.
+    local dlx_conf
+    dlx_conf="$(mktemp)"
+    {
+        printf 'studio|Studio|mon|A|Studio{count}|instructor,student|1|4|3|Mon-Wed\n'
+        printf 'studio|Studio|thu|B|Studio{count}|instructor,student|1|4|-|Thu-Fri\n'
+    } > "$dlx_conf"
+    out="$(week_occurrences "$dlx_conf" 2026-08-10 3)"
+    assert_eq "DAY_LABEL doesn't break EXCLUDE_WEEKS: week 3's mon row is excluded, only thu's Studio5 remains" \
+        "studio|Studio|Studio5|2026-08-13|thu|B|instructor,student" "$out"
+    out="$(week_occurrences "$dlx_conf" 2026-08-10 4 | head -1 | cut -d'|' -f3)"
+    assert_eq "DAY_LABEL doesn't break {count}: week 4 mon is Studio6, no gap/shift from the exclusion" \
+        "Studio6" "$out"
+    rm -f "$dlx_conf"
+
     # occurrence_date
     assert_eq "occurrence_date mon = week_monday" "2026-08-10" "$(occurrence_date 2026-08-10 mon)"
     assert_eq "occurrence_date fri = +4 days" "2026-08-14" "$(occurrence_date 2026-08-10 fri)"

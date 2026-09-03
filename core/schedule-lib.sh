@@ -137,9 +137,9 @@ format_slot_id() {
 # semester has few enough weeks/rows that re-scanning is negligible.
 occurrence_count() {
     local conf_file="$1" kind_id="$2" target_week="$3" target_weekday="$4" target_suffix="$5"
-    local k l w s sp v ws we ew week count=0
+    local k l w s sp v ws we ew dl week count=0
     for ((week = 1; week <= target_week; week++)); do
-        while IFS='|' read -r k l w s sp v ws we ew; do
+        while IFS='|' read -r k l w s sp v ws we ew dl; do
             [ -z "$k" ] && continue
             case "$k" in \#*) continue ;; esac
             [ "$k" = "$kind_id" ] || continue
