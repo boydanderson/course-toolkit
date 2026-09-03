@@ -88,11 +88,18 @@ test_cli() {
         "$readme_out" "Resources"
     assert_not_contains "no resources file: no Resources section in canvas" \
         "$canvas_out" "Resources"
+    assert_not_contains "no holidays.conf: no Public Holidays Reference in readme" \
+        "$readme_out" "Public Holidays Reference"
 
     printf '2026-10-14|18:00|21:00|Sumobot Competition\n' > "$scratch/config/key-events.conf"
     printf '<ul><li><a href="https://example.edu/faq">FAQ</a></li></ul>\n' \
         > "$scratch/config/canvas-resources.html"
     printf -- '- [FAQ](https://example.edu/faq)\n' > "$scratch/config/readme-resources.md"
+    # 2026-10-19 falls inside this fixture's real term window (its
+    # SEMESTER_START_MONDAY 2026-08-10 + 13 weeks + a week 6 recess ->
+    # 2026-08-03..2026-11-20, per semester_term_window); 2026-12-25 is
+    # deliberately outside it.
+    printf '2026-10-19|Deepavali\n2026-12-25|Christmas Day\n' > "$scratch/config/holidays.conf"
 
     local readme_with_extras canvas_with_extras
     readme_with_extras="$(COURSE_ROOT="$scratch" TOOLKIT_DIR="$TOOLKIT_DIR" \
@@ -112,6 +119,14 @@ test_cli() {
         "$readme_with_extras" "## Resources"
     assert_contains "readme: the resources file's content is appended verbatim" \
         "$readme_with_extras" "[FAQ](https://example.edu/faq)"
+    assert_contains "readme: Public Holidays Reference heading appears once configured" \
+        "$readme_with_extras" "## Public Holidays Reference (Term Window)"
+    assert_contains "readme: an in-window holiday shows up" \
+        "$readme_with_extras" "Deepavali"
+    assert_not_contains "readme: an out-of-window holiday is excluded" \
+        "$readme_with_extras" "Christmas"
+    assert_not_contains "canvas: Public Holidays Reference never appears (readme-only feature)" \
+        "$canvas_with_extras" "Public Holidays Reference"
 
     assert_contains "canvas: Key Events heading appears once configured" \
         "$canvas_with_extras" "<h2>Key Events</h2>"

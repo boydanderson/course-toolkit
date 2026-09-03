@@ -127,6 +127,13 @@ existing course's output is completely unaffected by their existence:
   `config/key-events.conf`, format `DATE|START_TIME|END_TIME|NAME`, one
   per line. `cli readme`/`cli canvas` append it after the main calendar
   table automatically if the file exists and has real rows.
+- **Public Holidays Reference** — a plain legend table of every holiday
+  in `config/holidays.conf` falling inside the semester's own span
+  (±7 days). `cli readme` only (markdown; no Canvas/HTML equivalent),
+  appended automatically whenever there's a real holiday in that window
+  — no separate config file or opt-in beyond `HOLIDAYS_FILE` itself. See
+  `core/render-holidays-reference.sh` / `core/semester-lib.sh`'s
+  `semester_term_window`.
 - **Resources** — a maintainer-edited block appended verbatim under a
   "Resources" heading. Two separate files since Markdown and HTML can't
   share content verbatim: `config/canvas-resources.html` (for `cli

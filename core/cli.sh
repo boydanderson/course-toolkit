@@ -34,7 +34,14 @@
 #   ALLOWLIST_FILE        default: config/release-allowlist.conf
 #   LABELS_FILE           default: config/session-kind-labels.conf
 #   NOTES_FILE            default: config/week-notes.conf
-#   HOLIDAYS_FILE         default: config/holidays.conf
+#   HOLIDAYS_FILE         default: config/holidays.conf. `readme`
+#                          (markdown only, no Canvas equivalent) also
+#                          appends a "Public Holidays Reference" table
+#                          of every holiday in this file falling inside
+#                          the semester's own span ±7 days -- automatic
+#                          whenever HOLIDAYS_FILE has real rows in that
+#                          window, no separate opt-in; see
+#                          render-holidays-reference.sh.
 #   EMOJI_FILE            default: config/holiday-emoji.conf
 #   KEY_EVENTS_FILE       default: config/key-events.conf (optional -- a
 #                          table of one-off dated events appended after
@@ -93,6 +100,7 @@ source "$TOOLKIT_DIR/core/enrich-lib.sh"
 source "$TOOLKIT_DIR/core/render-markdown.sh"
 source "$TOOLKIT_DIR/core/render-html.sh"
 source "$TOOLKIT_DIR/core/render-events.sh"
+source "$TOOLKIT_DIR/core/render-holidays-reference.sh"
 
 RENDERER="$(get_course_var RENDERER)"
 export RENDERER
@@ -185,6 +193,13 @@ cmd_readme() {
     key_events="$(render_key_events_markdown "$KEY_EVENTS")"
     if [ -n "$key_events" ]; then
         printf '\n## Key Events\n\n%s\n' "$key_events"
+    fi
+
+    local term_window holidays_ref
+    term_window="$(semester_term_window "$SEMESTER_START_MONDAY" "$NUM_WEEKS" "$RECESS_AFTER_WEEK")"
+    holidays_ref="$(render_holidays_reference_markdown "$HOLIDAYS" "$EMOJI" "${term_window%%|*}" "${term_window##*|}")"
+    if [ -n "$holidays_ref" ]; then
+        printf '\n## Public Holidays Reference (Term Window)\n\n%s\n' "$holidays_ref"
     fi
 
     if [ -f "$RESOURCES_MD" ]; then

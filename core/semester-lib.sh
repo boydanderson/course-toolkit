@@ -28,3 +28,21 @@ semester_weeks() {
         printf '%s|%s\n' "$i" "$monday"
     done
 }
+
+# semester_term_window START_MONDAY NUM_WEEKS [RECESS_AFTER_WEEK]
+# [BUFFER_DAYS] -> "WINDOW_START|WINDOW_END", the semester's real
+# first-to-last teaching day (START_MONDAY through the last teaching
+# week's Friday) padded by BUFFER_DAYS on each side (default 7). For a
+# "holidays around the term" reference window, not itself part of the
+# weekly schedule -- see render-holidays-reference.sh.
+semester_term_window() {
+    local start_monday="$1" num_weeks="$2" recess_after_week="${3:-0}" buffer="${4:-7}"
+    local last_monday
+    last_monday="$(semester_weeks "$start_monday" "$num_weeks" "$recess_after_week" | tail -1 | cut -d'|' -f2)"
+    local last_friday
+    last_friday="$(add_days "$last_monday" 4)"
+    local window_start window_end
+    window_start="$(add_days "$start_monday" "-${buffer}")"
+    window_end="$(add_days "$last_friday" "$buffer")"
+    printf '%s|%s\n' "$window_start" "$window_end"
+}
