@@ -69,6 +69,15 @@
 #                          occurrence as graded/important with a "🔴 "
 #                          title prefix in both readme/canvas; see
 #                          enrich-lib.sh's is_graded_slot)
+#   EXTRA_SLOTS_FILE       default: config/kind-extra-slots.conf
+#                          (optional, WEEK|KIND_ID|SLOT_ID -- extra slots
+#                          sharing a week+kind's already-scheduled
+#                          occurrence(s) without being a distinct weekly
+#                          occurrence of their own, e.g. a studio's
+#                          "-in-class" supplement; grouped by matching
+#                          title in readme, shown as independent stacked
+#                          blocks in canvas; see enrich-lib.sh's
+#                          kind_extra_slots)
 #
 # config/course.mk additionally supplies (beyond COURSE_CODE/COURSE_NAME/
 # HOSTING_ORG/CANVAS_HOST/RENDERER, see README):
@@ -124,6 +133,7 @@ KIND_EXTRA_LINKS="${KIND_EXTRA_LINKS_FILE:-$COURSE_ROOT/config/kind-extra-links.
 EXTRA_LINKS="${EXTRA_LINKS_FILE:-$COURSE_ROOT/config/extra-links.conf}"
 OCCASION_LINKS="${OCCASION_LINKS_FILE:-$COURSE_ROOT/config/occasion-links.conf}"
 GRADED_SLOTS="${GRADED_SLOTS_FILE:-$COURSE_ROOT/config/graded-slots.conf}"
+EXTRA_SLOTS="${EXTRA_SLOTS_FILE:-$COURSE_ROOT/config/kind-extra-slots.conf}"
 
 SEMESTER_START_MONDAY="$(get_course_var SEMESTER_START_MONDAY)"
 NUM_WEEKS="$(get_course_var NUM_WEEKS)"
@@ -155,7 +165,7 @@ _walk_semester() {
     local titles_out="${1:-}"
     [ -n "$titles_out" ] && : > "$titles_out"
     while IFS='|' read -r teaching_week monday; do
-        while IFS='|' read -r kind label slot_id date weekday suffix variants; do
+        while IFS='|' read -r kind label slot_id date weekday suffix variants cancel_extra; do
             [ -z "$kind" ] && continue
             local source_path
             source_path="$(_content_map_path "$slot_id")"
@@ -192,7 +202,7 @@ cmd_readme() {
     _walk_semester "$titles"
     render_markdown_calendar "$SESSION_KINDS" "$SEMESTER_START_MONDAY" \
         "$NUM_WEEKS" "$RECESS_AFTER_WEEK" "$titles" "$ALLOWLIST" "$LABELS" "$NOTES" \
-        "$PDF_BASE_URL" "$HOLIDAYS" "$EMOJI" "$KIND_EXTRA_LINKS" "$EXTRA_LINKS" "$OCCASION_LINKS" "$GRADED_SLOTS"
+        "$PDF_BASE_URL" "$HOLIDAYS" "$EMOJI" "$KIND_EXTRA_LINKS" "$EXTRA_LINKS" "$OCCASION_LINKS" "$GRADED_SLOTS" "$EXTRA_SLOTS"
     rm -f "$titles"
 
     local key_events
@@ -221,7 +231,7 @@ cmd_canvas() {
     render_html_calendar "$SESSION_KINDS" "$SEMESTER_START_MONDAY" \
         "$NUM_WEEKS" "$RECESS_AFTER_WEEK" "$titles" "$ALLOWLIST" "$LABELS" "$NOTES" \
         "$PDF_BASE_URL" "$HOLIDAYS" "$EMOJI" "$CALENDAR_PALETTE" "" \
-        "$KIND_EXTRA_LINKS" "$EXTRA_LINKS" "$OCCASION_LINKS" "$GRADED_SLOTS"
+        "$KIND_EXTRA_LINKS" "$EXTRA_LINKS" "$OCCASION_LINKS" "$GRADED_SLOTS" "$EXTRA_SLOTS"
     rm -f "$titles"
 
     local key_events

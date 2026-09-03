@@ -6,7 +6,8 @@
 #
 # Depends on: schedule-lib.sh (week_occurrences, session_kind_ids),
 # semester-lib.sh (semester_weeks), enrich-lib.sh (is_slot_released,
-# slot_title, slot_kind_label, week_note, is_holiday, holiday_emoji).
+# slot_title, slot_kind_label, week_note, is_holiday, holiday_emoji,
+# occurrence_holiday, kind_extra_slots).
 # Caller sources all of these (or this file, which sources its own
 # deps) before calling render_markdown_calendar.
 
@@ -94,9 +95,95 @@ _occasion_links_markdown() {
     echo "$out"
 }
 
+# _row_title_and_links KIND_ID SLOT_ID VARIANTS TITLES_FILE ALLOWLIST_FILE
+# BASE_URL EXTRA_LINK_LABEL EXTRA_LINK_FILE GRADED_FILE -> "TITLE|LINKS"
+# (split by the caller on the first "|") -- the title/graded-prefix/
+# release-gate/variant-links computation a normal occurrence row and an
+# extra slot (see kind_extra_slots, enrich-lib.sh) both need identically;
+# an extra slot just has no weekday/date/holiday-cancellation check of
+# its own, so it never calls this via the holiday branch.
+_row_title_and_links() {
+    local kind_id="$1" slot_id="$2" variants="$3" titles_file="$4" allowlist_file="$5"
+    local base_url="$6" extra_link_label="$7" extra_link_file="$8" graded_file="$9"
+    local title released links extra_url=""
+    title="$(slot_title "$slot_id" "$titles_file")"
+    title="$(compose_slot_title "$slot_id" "$title")"
+    if [ -n "$graded_file" ] && is_graded_slot "$slot_id" "$graded_file"; then
+        title="🔴 ${title}"
+    fi
+    if is_slot_released "$slot_id" "$allowlist_file"; then
+        released=1
+    else
+        released=0
+    fi
+    [ -n "$extra_link_label" ] && extra_url="$(extra_link_for_slot "$slot_id" "$extra_link_file")"
+    links="$(_md_variant_links "$kind_id" "$slot_id" "$variants" "$base_url" "$released" "$extra_link_label" "$extra_url")"
+    printf '%s|%s\n' "$title" "$links"
+}
+
+# _row_raw_title_and_links -- same args/shape as _row_title_and_links,
+# but returns the RAW title (before compose_slot_title's own SLOT_ID
+# prefix), for the grouping path only. compose_slot_title always
+# prefixes a slot's OWN id onto its title, so two different slots
+# sharing the same real title (e.g. a studio "S3" and its "S3-in-class"
+# supplement) would never produce matching COMPOSED titles to group
+# by -- grouping has to key on the raw title instead, then compose the
+# merged group's display title once, using its own representative slot
+# (see render_kind_cell's grouping branch).
+_row_raw_title_and_links() {
+    local kind_id="$1" slot_id="$2" variants="$3" titles_file="$4" allowlist_file="$5"
+    local base_url="$6" extra_link_label="$7" extra_link_file="$8" graded_file="$9"
+    local title released links extra_url=""
+    title="$(slot_title "$slot_id" "$titles_file")"
+    if [ -n "$graded_file" ] && is_graded_slot "$slot_id" "$graded_file"; then
+        title="🔴 ${title}"
+    fi
+    if is_slot_released "$slot_id" "$allowlist_file"; then
+        released=1
+    else
+        released=0
+    fi
+    [ -n "$extra_link_label" ] && extra_url="$(extra_link_for_slot "$slot_id" "$extra_link_file")"
+    links="$(_md_variant_links "$kind_id" "$slot_id" "$variants" "$base_url" "$released" "$extra_link_label" "$extra_url")"
+    printf '%s|%s\n' "$title" "$links"
+}
+
+# _md_group_add TITLE SLOT_ID LINKS -> merges (SLOT_ID, LINKS) into
+# module-private globals _MD_GROUP_TITLE/_MD_GROUP_ENTRY/_MD_GROUP_SLOT/
+# _MD_GROUP_COUNT (reset by the caller -- see render_kind_cell's grouping
+# branch -- before its first call this invocation) under an exact TITLE
+# match; a title's first entry renders plain ("TITLE (LINKS)"), a second
+# or later entry switches the WHOLE group to a slot-labeled form
+# ("TITLE (SLOT1: LINKS1; SLOT2: LINKS2)") so a reader can tell which
+# link belongs to which slot once there's more than one under one title.
+# Plain top-level function operating on module-private globals, not
+# caller-local arrays -- bash 3.2 (macOS's shipped /bin/bash) has no
+# nameref support to pass arrays by reference.
+_md_group_add() {
+    local t="$1" slot="$2" links="$3" j found=0
+    for ((j = 0; j < ${#_MD_GROUP_TITLE[@]}; j++)); do
+        if [ "${_MD_GROUP_TITLE[$j]}" = "$t" ]; then
+            if [ "${_MD_GROUP_COUNT[$j]}" -eq 1 ]; then
+                _MD_GROUP_ENTRY[$j]="${_MD_GROUP_SLOT[$j]}: ${_MD_GROUP_ENTRY[$j]}"
+            fi
+            _MD_GROUP_ENTRY[$j]="${_MD_GROUP_ENTRY[$j]}; ${slot}: ${links}"
+            _MD_GROUP_COUNT[$j]=$((_MD_GROUP_COUNT[$j] + 1))
+            found=1
+            break
+        fi
+    done
+    if [ "$found" -eq 0 ]; then
+        _MD_GROUP_TITLE+=("$t")
+        _MD_GROUP_ENTRY+=("$links")
+        _MD_GROUP_SLOT+=("$slot")
+        _MD_GROUP_COUNT+=(1)
+    fi
+}
+
 # render_kind_cell WEEK KIND_ID OCCURRENCES_FILE TITLES_FILE ALLOWLIST_FILE
 # LABELS_FILE PDF_BASE_URL HOLIDAYS_FILE EMOJI_FILE [EXTRA_LINK_LABEL]
 # [EXTRA_LINK_FILE] [OCCASION_LINKS_FILE] [SUFFIX_FILTER] [GRADED_FILE]
+# [EXTRA_SLOTS_FILE]
 # -> this week's cell text for one kind column, "-" if nothing scheduled and no
 # override label. OCCURRENCES_FILE holds this week's full
 # week_occurrences() output (computed once per week by the caller,
@@ -134,15 +221,33 @@ _occasion_links_markdown() {
 # label itself matched. GRADED_FILE (optional, one SLOT_ID per line --
 # see enrich-lib.sh's is_graded_slot) marks a real occurrence as
 # graded/important by prefixing its title with "🔴 " -- a course that
-# doesn't create GRADED_FILE just gets no slot marked.
+# doesn't create GRADED_FILE just gets no slot marked. EXTRA_SLOTS_FILE
+# (optional, WEEK|KIND_ID|SLOT_ID -- see enrich-lib.sh's
+# kind_extra_slots) lists extra slot IDs that share this week+kind
+# without being a distinct weekly occurrence of their own (e.g. a
+# studio's "-in-class" supplement riding along with the same session, no
+# separate weekday/holiday-check) -- each gets the same title+links
+# treatment as a normal row (inheriting the LAST processed row's
+# VARIANTS, since an extra slot declares none of its own), then merges
+# with any row/extra sharing an EXACTLY matching composed title (see
+# _md_group_add) rather than always adding a separate entry. A course
+# that never creates EXTRA_SLOTS_FILE (or has none for this week+kind)
+# gets today's exact behavior, unchanged.
 render_kind_cell() {
     local week="$1" kind_id="$2" occurrences_file="$3" titles_file="$4"
     local allowlist_file="$5" labels_file="$6" base_url="$7"
     local holidays_file="$8" emoji_file="$9"
     local extra_link_label="${10:-}" extra_link_file="${11:-}"
     local occasion_links_file="${12:-}" suffix_filter="${13:-}"
-    local graded_file="${14:-}"
+    local graded_file="${14:-}" extra_slots_file="${15:-}"
     local rows
+    local -a extra_slot_ids=()
+    if [ -n "$extra_slots_file" ]; then
+        local es
+        while IFS= read -r es; do
+            [ -n "$es" ] && extra_slot_ids+=("$es")
+        done < <(kind_extra_slots "$week" "$kind_id" "$extra_slots_file")
+    fi
     if [ -n "$suffix_filter" ]; then
         rows=$(awk -F'|' -v k="$kind_id" -v s="$suffix_filter" '$1==k && $6==s' "$occurrences_file")
     else
@@ -182,31 +287,73 @@ render_kind_cell() {
         fi
         return 0
     fi
-    while IFS='|' read -r rkind rlabel rslot rdate rweekday rsuffix rvariants; do
-        [ -z "$rkind" ] && continue
-        local holiday_name
-        holiday_name="$(is_holiday "$rdate" "$holidays_file")" && {
-            local emoji prefix=""
-            emoji="$(holiday_emoji "$holiday_name" "$emoji_file")"
-            [ -n "$emoji" ] && prefix="${emoji} "
-            cell_parts+=("No ${rlabel} (${prefix}${holiday_name})")
-            continue
-        }
-        local title released links extra_url=""
-        title="$(slot_title "$rslot" "$titles_file")"
-        title="$(compose_slot_title "$rslot" "$title")"
-        if [ -n "$graded_file" ] && is_graded_slot "$rslot" "$graded_file"; then
-            title="🔴 ${title}"
-        fi
-        if is_slot_released "$rslot" "$allowlist_file"; then
-            released=1
-        else
-            released=0
-        fi
-        [ -n "$extra_link_label" ] && extra_url="$(extra_link_for_slot "$rslot" "$extra_link_file")"
-        links="$(_md_variant_links "$rkind" "$rslot" "$rvariants" "$base_url" "$released" "$extra_link_label" "$extra_url")"
-        cell_parts+=("${title} (${links})")
-    done <<< "$rows"
+    if [ ${#extra_slot_ids[@]} -eq 0 ]; then
+        # No extra slots for this week+kind -- today's exact behavior,
+        # completely unchanged.
+        while IFS='|' read -r rkind rlabel rslot rdate rweekday rsuffix rvariants rcancel_extra; do
+            [ -z "$rkind" ] && continue
+            local holiday_name
+            holiday_name="$(occurrence_holiday "$rdate" "$rcancel_extra" "$holidays_file")" && {
+                local emoji prefix=""
+                emoji="$(holiday_emoji "$holiday_name" "$emoji_file")"
+                [ -n "$emoji" ] && prefix="${emoji} "
+                cell_parts+=("No ${rlabel} (${prefix}${holiday_name})")
+                continue
+            }
+            local title released links extra_url=""
+            title="$(slot_title "$rslot" "$titles_file")"
+            title="$(compose_slot_title "$rslot" "$title")"
+            if [ -n "$graded_file" ] && is_graded_slot "$rslot" "$graded_file"; then
+                title="🔴 ${title}"
+            fi
+            if is_slot_released "$rslot" "$allowlist_file"; then
+                released=1
+            else
+                released=0
+            fi
+            [ -n "$extra_link_label" ] && extra_url="$(extra_link_for_slot "$rslot" "$extra_link_file")"
+            links="$(_md_variant_links "$rkind" "$rslot" "$rvariants" "$base_url" "$released" "$extra_link_label" "$extra_url")"
+            cell_parts+=("${title} (${links})")
+        done <<< "$rows"
+    else
+        # One or more extra slots share this week+kind (e.g. a studio's
+        # "-in-class" supplement) -- group by exact composed-title match
+        # via _md_group_add instead of always adding a separate entry.
+        _MD_GROUP_TITLE=() _MD_GROUP_ENTRY=() _MD_GROUP_SLOT=() _MD_GROUP_COUNT=()
+        local primary_variants=""
+        while IFS='|' read -r rkind rlabel rslot rdate rweekday rsuffix rvariants rcancel_extra; do
+            [ -z "$rkind" ] && continue
+            primary_variants="$rvariants"
+            local holiday_name
+            holiday_name="$(occurrence_holiday "$rdate" "$rcancel_extra" "$holidays_file")" && {
+                local emoji prefix=""
+                emoji="$(holiday_emoji "$holiday_name" "$emoji_file")"
+                [ -n "$emoji" ] && prefix="${emoji} "
+                cell_parts+=("No ${rlabel} (${prefix}${holiday_name})")
+                continue
+            }
+            local tl title links
+            tl="$(_row_raw_title_and_links "$rkind" "$rslot" "$rvariants" "$titles_file" "$allowlist_file" "$base_url" "$extra_link_label" "$extra_link_file" "$graded_file")"
+            title="${tl%%|*}"
+            links="${tl#*|}"
+            _md_group_add "$title" "$rslot" "$links"
+        done <<< "$rows"
+        local es_i
+        for ((es_i = 0; es_i < ${#extra_slot_ids[@]}; es_i++)); do
+            local es="${extra_slot_ids[$es_i]}"
+            local tl title links
+            tl="$(_row_raw_title_and_links "$kind_id" "$es" "$primary_variants" "$titles_file" "$allowlist_file" "$base_url" "$extra_link_label" "$extra_link_file" "$graded_file")"
+            title="${tl%%|*}"
+            links="${tl#*|}"
+            _md_group_add "$title" "$es" "$links"
+        done
+        local gi
+        for ((gi = 0; gi < ${#_MD_GROUP_TITLE[@]}; gi++)); do
+            local composed
+            composed="$(compose_slot_title "${_MD_GROUP_SLOT[$gi]}" "${_MD_GROUP_TITLE[$gi]}")"
+            cell_parts+=("${composed} (${_MD_GROUP_ENTRY[$gi]})")
+        done
+    fi
     # $IFS-based joining only uses IFS's first character, not the whole
     # separator string -- an explicit loop avoids that trap for a
     # multi-character separator like "<br>".
@@ -240,13 +387,17 @@ render_kind_cell() {
 # to 2 optional links -- see render_kind_cell's comment. GRADED_FILE
 # (optional, one SLOT_ID per line) marks real occurrences as graded/
 # important with a "🔴 " title prefix -- see render_kind_cell's comment
-# and enrich-lib.sh's is_graded_slot.
+# and enrich-lib.sh's is_graded_slot. EXTRA_SLOTS_FILE (optional,
+# WEEK|KIND_ID|SLOT_ID) lists extra per-week slots for a kind, grouped by
+# matching title with whatever occurrence(s) that week+kind already has
+# -- see render_kind_cell's comment and enrich-lib.sh's kind_extra_slots.
 render_markdown_calendar() {
     local kinds_conf="$1" start_monday="$2" num_weeks="$3" recess_after="$4"
     local titles_file="$5" allowlist_file="$6" labels_file="$7" notes_file="$8"
     local base_url="$9" holidays_file="${10}" emoji_file="${11}"
     local kind_extra_links_file="${12:-}" extra_links_file="${13:-}"
     local occasion_links_file="${14:-}" graded_file="${15:-}"
+    local extra_slots_file="${16:-}"
 
     local -a col_kind col_suffix col_header
     local ck cs ch
@@ -293,7 +444,7 @@ render_markdown_calendar() {
             local k="${col_kind[$i]}" s="${col_suffix[$i]}"
             local cell extra_label=""
             [ -n "$kind_extra_links_file" ] && extra_label="$(kind_extra_link_label "$k" "$kind_extra_links_file")"
-            cell="$(render_kind_cell "$teaching_week" "$k" "$occ_file" "$titles_file" "$allowlist_file" "$labels_file" "$base_url" "$holidays_file" "$emoji_file" "$extra_label" "$extra_links_file" "$occasion_links_file" "$s" "$graded_file")"
+            cell="$(render_kind_cell "$teaching_week" "$k" "$occ_file" "$titles_file" "$allowlist_file" "$labels_file" "$base_url" "$holidays_file" "$emoji_file" "$extra_label" "$extra_links_file" "$occasion_links_file" "$s" "$graded_file" "$extra_slots_file")"
             row="${row} ${cell} |"
         done
         local note maintainer_note holiday_note

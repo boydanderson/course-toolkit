@@ -121,6 +121,32 @@ is_holiday() {
     echo "$name"
 }
 
+# occurrence_holiday DATE EXTRA_DATES HOLIDAYS_FILE -> the first holiday
+# name found (success/0), checking DATE first, then each comma-separated
+# EXTRA_DATES entry in order (schedule-lib.sh's week_occurrences already
+# computes these from a row's optional CANCEL_EXTRA_WEEKDAYS field);
+# empty + failure (1) if none of them land on a holiday. Thin wrapper
+# around is_holiday, looped -- lets an occurrence spanning more than one
+# real calendar day (e.g. a studio meeting Monday AND Tuesday with the
+# same material) be cancelled by a holiday on ANY of those days, not just
+# its own primary DATE. With EXTRA_DATES empty (the default -- a course
+# that never sets CANCEL_EXTRA_WEEKDAYS), behaves exactly like a plain
+# is_holiday call.
+occurrence_holiday() {
+    local date="$1" extra_dates="$2" holidays_file="$3" name
+    name="$(is_holiday "$date" "$holidays_file")" && { echo "$name"; return 0; }
+    [ -z "$extra_dates" ] && return 1
+    local d
+    local IFS_SAVE="$IFS"
+    IFS=','
+    for d in $extra_dates; do
+        IFS="$IFS_SAVE"
+        name="$(is_holiday "$d" "$holidays_file")" && { echo "$name"; return 0; }
+    done
+    IFS="$IFS_SAVE"
+    return 1
+}
+
 # holiday_emoji NAME EMOJI_FILE -> one emoji for this holiday, empty if
 # none mapped. Format: HOLIDAY_NAME|EMOJI. Strips a trailing
 # "(Observed)"/"(observed)" and normalizes a curly apostrophe to
@@ -168,6 +194,22 @@ week_holiday_notes() {
         out="${out}; ${lines[$j]}"
     done
     echo "$out"
+}
+
+# kind_extra_slots WEEK KIND_ID EXTRA_SLOTS_FILE -> one SLOT_ID per line
+# (file order), for slots that share WEEK+KIND_ID with whatever
+# week_occurrences() already produced but aren't a distinct weekly
+# occurrence of their own -- e.g. a studio's "-in-class" supplement, the
+# same session as the week's regular studio occurrence, no separate
+# weekday/date/holiday-cancellation check, just a second linked file.
+# Format: WEEK|KIND_ID|SLOT_ID. Empty if none/no file -- a course that
+# never creates EXTRA_SLOTS_FILE just never gets this behavior (see
+# render-markdown.sh's render_kind_cell / render-html.sh's
+# render_kind_cell_html, both take it as an optional trailing param).
+kind_extra_slots() {
+    local week="$1" kind_id="$2" extra_slots_file="$3"
+    [ -f "$extra_slots_file" ] || return 0
+    awk -F'|' -v w="$week" -v k="$kind_id" '$1==w && $2==k {print $3}' "$extra_slots_file"
 }
 
 # kind_extra_link_label KIND_ID LABELS_FILE -> the label for this kind's

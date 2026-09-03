@@ -61,6 +61,21 @@ test_enrich_lib() {
     assert_eq "holiday_emoji: a curly apostrophe normalizes to match a straight-apostrophe key" \
         "🎉" "$(holiday_emoji "New Year’s Day" "$scratch/emoji.conf")"
 
+    # occurrence_holiday -- checks a primary date first, then optional
+    # comma-separated extra dates (schedule-lib.sh's week_occurrences own
+    # CANCEL_EXTRA_DATES output), for an occurrence spanning more than one
+    # real calendar day (e.g. a studio meeting Monday AND Tuesday).
+    assert_eq "occurrence_holiday: primary date matches, extra_dates never checked" \
+        "NUS Well-Being Day" "$(occurrence_holiday 2026-10-09 "" "$scratch/holidays.conf")"
+    assert_eq "occurrence_holiday: primary date is clean, extra date matches" \
+        "NUS Well-Being Day" "$(occurrence_holiday 2026-10-08 2026-10-09 "$scratch/holidays.conf")"
+    assert_eq "occurrence_holiday: primary clean, second of two extra dates matches" \
+        "NUS Well-Being Day" "$(occurrence_holiday 2026-10-06 2026-10-07,2026-10-09 "$scratch/holidays.conf")"
+    assert_failure "occurrence_holiday: neither primary nor any extra date matches" \
+        occurrence_holiday 2026-10-06 2026-10-07,2026-10-08 "$scratch/holidays.conf"
+    assert_failure "occurrence_holiday: empty extra_dates behaves exactly like plain is_holiday" \
+        occurrence_holiday 2026-10-06 "" "$scratch/holidays.conf"
+
     # kind_extra_link_label / extra_link_for_slot
     printf 'lecture|Recording\n' > "$scratch/kind-extra-links.conf"
     assert_eq "kind_extra_link_label: match" "Recording" \

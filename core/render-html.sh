@@ -181,7 +181,21 @@ _occasion_links_html() {
 # for the full rationale (the same fix, mirrored here). GRADED_FILE
 # (15th, optional, one SLOT_ID per line) marks a real occurrence as
 # graded/important with a "🔴 " title prefix -- see enrich-lib.sh's
-# is_graded_slot.
+# is_graded_slot. EXTRA_SLOTS_FILE (16th, optional, WEEK|KIND_ID|SLOT_ID
+# -- see enrich-lib.sh's kind_extra_slots) lists extra slot IDs sharing
+# this week+kind without being a distinct weekly occurrence of their own
+# (e.g. a studio's "-in-class" supplement) -- each gets its own stacked
+# title+links block appended after the regular occurrence(s), inheriting
+# the LAST processed row's VARIANTS since it declares none of its own.
+# Unlike the markdown renderer's render_kind_cell, extra slots here are
+# NOT grouped/deduped by matching title -- real course-materials Canvas
+# rendering (render_studio_cell) already shows each studio number as its
+# own independent block, no merging, so this mirrors that directly
+# rather than inventing new HTML-side grouping. If any regular occurrence
+# this week+kind was holiday-cancelled, extra slots are skipped entirely
+# (they ride along with the session that didn't happen). A course that
+# never creates EXTRA_SLOTS_FILE (or has none for this week+kind) gets
+# today's exact behavior, unchanged.
 render_kind_cell_html() {
     local week="$1" kind_id="$2" occurrences_file="$3" titles_file="$4"
     local allowlist_file="$5" labels_file="$6" base_url="$7"
@@ -189,9 +203,16 @@ render_kind_cell_html() {
     local palette="${10:-}"
     local extra_link_label="${11:-}" extra_link_file="${12:-}"
     local occasion_links_file="${13:-}" suffix_filter="${14:-}"
-    local graded_file="${15:-}"
+    local graded_file="${15:-}" extra_slots_file="${16:-}"
     _calendar_palette "$palette"
     local rows
+    local -a extra_slot_ids=()
+    if [ -n "$extra_slots_file" ]; then
+        local es
+        while IFS= read -r es; do
+            [ -n "$es" ] && extra_slot_ids+=("$es")
+        done < <(kind_extra_slots "$week" "$kind_id" "$extra_slots_file")
+    fi
     if [ -n "$suffix_filter" ]; then
         rows=$(awk -F'|' -v k="$kind_id" -v s="$suffix_filter" '$1==k && $6==s' "$occurrences_file")
     else
@@ -226,14 +247,17 @@ render_kind_cell_html() {
     fi
 
     local cancelled_style="font-weight:600;color:${CAL_CANCELLED};"
-    while IFS='|' read -r rkind rlabel rslot rdate rweekday rsuffix rvariants; do
+    local primary_variants="" any_cancelled=0
+    while IFS='|' read -r rkind rlabel rslot rdate rweekday rsuffix rvariants rcancel_extra; do
         [ -z "$rkind" ] && continue
+        primary_variants="$rvariants"
         local holiday_name
-        holiday_name="$(is_holiday "$rdate" "$holidays_file")" && {
+        holiday_name="$(occurrence_holiday "$rdate" "$rcancel_extra" "$holidays_file")" && {
             local emoji prefix=""
             emoji="$(holiday_emoji "$holiday_name" "$emoji_file")"
             [ -n "$emoji" ] && prefix="${emoji} "
             cell_html="${cell_html}<div style=\"${cancelled_style}\">No $(echo "$rlabel" | _html_escape) (${prefix}$(echo "$holiday_name" | _html_escape))</div>"
+            any_cancelled=1
             continue
         }
         local title released links extra_url=""
@@ -247,6 +271,23 @@ render_kind_cell_html() {
         links="$(_html_variant_links "$rkind" "$rslot" "$rvariants" "$base_url" "$released" "$palette" "$extra_link_label" "$extra_url")"
         cell_html="${cell_html}<div style=\"font-weight:600;\">$(echo "$title" | _html_escape)</div><div style=\"margin-top:2px;font-size:0.85rem;\">${links}</div>"
     done <<< "$rows"
+
+    if [ "$any_cancelled" -eq 0 ]; then
+        local es_i
+        for ((es_i = 0; es_i < ${#extra_slot_ids[@]}; es_i++)); do
+            local es="${extra_slot_ids[$es_i]}"
+            local title released links extra_url=""
+            title="$(slot_title "$es" "$titles_file")"
+            title="$(compose_slot_title "$es" "$title")"
+            if [ -n "$graded_file" ] && is_graded_slot "$es" "$graded_file"; then
+                title="🔴 ${title}"
+            fi
+            if is_slot_released "$es" "$allowlist_file"; then released=1; else released=0; fi
+            [ -n "$extra_link_label" ] && extra_url="$(extra_link_for_slot "$es" "$extra_link_file")"
+            links="$(_html_variant_links "$kind_id" "$es" "$primary_variants" "$base_url" "$released" "$palette" "$extra_link_label" "$extra_url")"
+            cell_html="${cell_html}<div style=\"font-weight:600;\">$(echo "$title" | _html_escape)</div><div style=\"margin-top:2px;font-size:0.85rem;\">${links}</div>"
+        done
+    fi
     echo "$cell_html"
 }
 
@@ -276,7 +317,11 @@ render_kind_cell_html() {
 # and this file gives it up to 2 optional links. GRADED_FILE (17th,
 # optional, one SLOT_ID per line) marks real occurrences as graded/
 # important with a "🔴 " title prefix -- see render_kind_cell_html's
-# comment and enrich-lib.sh's is_graded_slot.
+# comment and enrich-lib.sh's is_graded_slot. EXTRA_SLOTS_FILE (18th,
+# optional, WEEK|KIND_ID|SLOT_ID) lists extra per-week slots for a kind,
+# each its own stacked title+links block (no grouping, unlike the
+# markdown renderer -- see render_kind_cell_html's own comment) --
+# enrich-lib.sh's kind_extra_slots.
 render_html_calendar() {
     local kinds_conf="$1" start_monday="$2" num_weeks="$3" recess_after="$4"
     local titles_file="$5" allowlist_file="$6" labels_file="$7" notes_file="$8"
@@ -284,6 +329,7 @@ render_html_calendar() {
     local today="${13:-}"
     local kind_extra_links_file="${14:-}" extra_links_file="${15:-}"
     local occasion_links_file="${16:-}" graded_file="${17:-}"
+    local extra_slots_file="${18:-}"
     [ -z "$today" ] && today="$(sgt_date '+%Y-%m-%d')"
     _calendar_palette "$palette"
 
@@ -363,7 +409,7 @@ render_html_calendar() {
             local k="${col_kind[$i]}" s="${col_suffix[$i]}"
             local cell extra_label=""
             [ -n "$kind_extra_links_file" ] && extra_label="$(kind_extra_link_label "$k" "$kind_extra_links_file")"
-            cell="$(render_kind_cell_html "$teaching_week" "$k" "$occ_file" "$titles_file" "$allowlist_file" "$labels_file" "$base_url" "$holidays_file" "$emoji_file" "$palette" "$extra_label" "$extra_links_file" "$occasion_links_file" "$s" "$graded_file")"
+            cell="$(render_kind_cell_html "$teaching_week" "$k" "$occ_file" "$titles_file" "$allowlist_file" "$labels_file" "$base_url" "$holidays_file" "$emoji_file" "$palette" "$extra_label" "$extra_links_file" "$occasion_links_file" "$s" "$graded_file" "$extra_slots_file")"
             printf '<td style="%s">%s</td>' "$row_style" "$cell"
         done
         local note maintainer_note holiday_note

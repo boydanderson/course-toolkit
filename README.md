@@ -52,7 +52,7 @@ for every renderer-specific step.
   `KIND_ID`):
 
   ```
-  KIND_ID|LABEL|WEEKDAY|SUFFIX|SLOT_PATTERN|VARIANTS|WEEK_START|WEEK_END|EXCLUDE_WEEKS|DAY_LABEL
+  KIND_ID|LABEL|WEEKDAY|SUFFIX|SLOT_PATTERN|VARIANTS|WEEK_START|WEEK_END|EXCLUDE_WEEKS|DAY_LABEL|CANCEL_EXTRA_WEEKDAYS
   ```
 
   | Field | Meaning |
@@ -66,6 +66,7 @@ for every renderer-specific step.
   | `WEEK_START`, `WEEK_END` | inclusive teaching-week bounds this occurrence is active for |
   | `EXCLUDE_WEEKS` | optional (omit, or `-`): comma-separated week numbers to skip within that range, e.g. `4,6,10,12` for assessment-displaced weeks |
   | `DAY_LABEL` | optional 10th field (omit entirely, or `-`): overrides the weekday name a split column's header shows for this one occurrence (see "Column splitting" below) — `WEEKDAY` still has to name one concrete day for the schedule engine's own date math, but a course whose real session isn't pinned to that exact day (e.g. "Session 1, some day Mon-Wed") can set `DAY_LABEL` to `Mon-Wed` so the header doesn't assert a precision that isn't real |
+  | `CANCEL_EXTRA_WEEKDAYS` | optional 11th field (omit entirely, or `-`): comma-separated weekday names (e.g. `tue`) this same occurrence *also* spans, for a session held across more than one calendar day with the same material (e.g. a studio meeting Monday **and** Tuesday) — a holiday landing on *any* of these days, not just `WEEKDAY`'s own, still cancels the occurrence. Purely a cancellation check: these extra days don't get their own slot ID, column, or `{count}` — it's still exactly one row, one `SLOT_ID` |
 
   This is what makes "2 lectures a week" vs. "1 lecture + 1 recitation +
   1 lab a week" — and a real course's irregular exceptions — expressible
@@ -185,6 +186,20 @@ existing course's output is completely unaffected by their existence:
   deliverable, or any other session worth calling out visually. Purely
   a display marker; doesn't affect release gating, versioning, or
   anything else.
+- **Extra per-week slots** (e.g. a studio's "-in-class" supplement, a
+  second linked file sharing that week's already-scheduled session
+  without being a distinct weekly occurrence of its own — no separate
+  weekday, date, or holiday-cancellation check) — `config/kind-extra-
+  slots.conf`, format `WEEK|KIND_ID|SLOT_ID`. `cli readme` groups an
+  extra slot into the same cell entry as whichever real occurrence(s)
+  share an *exactly matching* title that week (e.g. two slots that both
+  turn out to cover "Interrupts" show as one entry, "Slot1: ... ; Slot2:
+  ..."), keeping genuinely different titles as separate entries. `cli
+  canvas` doesn't group at all — each extra slot gets its own
+  independent stacked title+links block, matching real course-materials
+  Canvas rendering. If the week's real occurrence is holiday-cancelled,
+  extra slots are skipped entirely (they ride along with the session
+  that didn't happen). See `core/enrich-lib.sh`'s `kind_extra_slots`.
 
 ## Using it
 

@@ -247,6 +247,84 @@ EOF
             /dev/null /dev/null https://x /dev/null /dev/null)" \
         "Recess"
 
+    # CANCEL_EXTRA_WEEKDAYS: an occurrence declared mon + "tue" extra
+    # must be cancelled by a holiday landing on EITHER day, not just its
+    # own primary WEEKDAY -- the real studio Mon+Tue combined-cell need.
+    local cew_kinds="$scratch/cew-kinds.conf"
+    printf 'studio|Studio|mon|-|S{n}|view,print|1|13|-|-|tue\n' > "$cew_kinds"
+    local cew_holidays="$scratch/cew-holidays.conf"
+    printf '2026-08-11|Test Holiday\n' > "$cew_holidays"
+    out="$(render_markdown_calendar "$cew_kinds" 2026-08-10 1 0 /dev/null /dev/null \
+        /dev/null /dev/null https://x "$cew_holidays" /dev/null)"
+    assert_contains "a holiday on the EXTRA weekday still cancels the occurrence" \
+        "$out" "No Studio (Test Holiday)"
+
+    printf '2026-08-10|Test Holiday\n' > "$cew_holidays"
+    out="$(render_markdown_calendar "$cew_kinds" 2026-08-10 1 0 /dev/null /dev/null \
+        /dev/null /dev/null https://x "$cew_holidays" /dev/null)"
+    assert_contains "a holiday on the PRIMARY weekday still cancels the occurrence (unchanged)" \
+        "$out" "No Studio (Test Holiday)"
+
+    printf '2026-08-12|Test Holiday\n' > "$cew_holidays"
+    out="$(render_markdown_calendar "$cew_kinds" 2026-08-10 1 0 /dev/null /dev/null \
+        /dev/null /dev/null https://x "$cew_holidays" /dev/null)"
+    assert_not_contains "a holiday on neither weekday doesn't cancel anything" \
+        "$out" "No Studio"
+    assert_contains "the occurrence still renders normally" "$out" "S1"
+
+    # EXTRA_SLOTS_FILE: a studio's "-in-class" supplement shares the
+    # week's regular occurrence -- grouped by matching title, kept
+    # separate when titles genuinely differ (course-materials' own real
+    # S3/S3-in-class vs S4/S4-in-class cases).
+    local es_occ="$scratch/es-occurrences.tsv"
+    printf 'studio|Studio|S3|2026-08-24|mon|-|view,print\n' > "$es_occ"
+    local es_titles="$scratch/es-titles.conf"
+    printf 'S3|A Title\nS3-in-class|A Title\n' > "$es_titles"
+    local es_extra="$scratch/es-extra.conf"
+    printf '3|studio|S3-in-class\n' > "$es_extra"
+    out="$(render_kind_cell 3 studio "$es_occ" "$es_titles" /dev/null /dev/null https://x /dev/null /dev/null \
+        "" "" "" "" "" "$es_extra")"
+    assert_contains "matching-title extra slot merges into one title entry" "$out" "A Title ("
+    assert_contains "merged entry labels each contributing slot" "$out" "S3: "
+    assert_contains "merged entry labels the extra slot too" "$out" "S3-in-class: "
+
+    local es_titles2="$scratch/es-titles2.conf"
+    printf 'S3|Title A\nS3-in-class|Title B\n' > "$es_titles2"
+    out="$(render_kind_cell 3 studio "$es_occ" "$es_titles2" /dev/null /dev/null https://x /dev/null /dev/null \
+        "" "" "" "" "" "$es_extra")"
+    assert_contains "different-title extra slot stays a separate entry (1)" "$out" "Title A ("
+    assert_contains "different-title extra slot stays a separate entry (2)" "$out" "Title B ("
+    assert_contains "different-title entries are NOT merged: separate blocks joined by <br>" \
+        "$out" "<br>"
+    assert_not_contains "different-title entries are NOT merged: no semicolon-joined sub-entries" \
+        "$out" "; S3-in-class: "
+
+    # No EXTRA_SLOTS_FILE, or none for this week+kind: identical to
+    # today's plain single-entry output -- one cell_parts entry, no
+    # semicolon-joined multi-slot form.
+    out="$(render_kind_cell 3 studio "$es_occ" "$es_titles" /dev/null /dev/null https://x /dev/null /dev/null)"
+    assert_contains "no extra_slots_file: plain single entry" "$out" "A Title ("
+    assert_not_contains "no extra_slots_file: extra slot never looked up" "$out" "S3-in-class"
+
+    out="$(render_kind_cell 4 studio "$es_occ" "$es_titles" /dev/null /dev/null https://x /dev/null /dev/null \
+        "" "" "" "" "" "$es_extra")"
+    assert_not_contains "extra_slots_file present but no entry for THIS week: unchanged" "$out" "S3-in-class"
+
+    # render_markdown_calendar end to end: the 16th positional param
+    # threads through to render_kind_cell. es_kinds2's slot_pattern
+    # "S{n}" produces "S3" at teaching week 3 -- matches es_titles'/
+    # es_extra's own "S3"/"S3-in-class"/week-3 fixtures above.
+    local es_kinds2="$scratch/es-kinds2.conf"
+    printf 'studio|Studio|mon|-|S{n}|view,print|1|13|-\n' > "$es_kinds2"
+    out="$(render_markdown_calendar "$es_kinds2" 2026-08-10 3 0 "$es_titles" /dev/null \
+        /dev/null /dev/null https://x /dev/null /dev/null "" "" "" "" "$es_extra")"
+    local week3_row_es
+    week3_row_es="$(echo "$out" | grep '^| 3 |')"
+    assert_contains "render_markdown_calendar: EXTRA_SLOTS_FILE threads through end to end" \
+        "$week3_row_es" "A Title ("
+    assert_contains "render_markdown_calendar: the merged entry shows both slots" \
+        "$week3_row_es" "S3-in-class: "
+
     # week_holiday_notes wired into the Notes column: a holiday that
     # lands on a day this kind doesn't meet (kinds is wed/fri; Thursday
     # is neither) must still surface in Notes, not silently disappear

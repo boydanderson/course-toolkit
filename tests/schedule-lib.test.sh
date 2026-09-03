@@ -83,7 +83,7 @@ studio|B|Thu-Fri (Studio B)" "$out"
     } > "$dlx_conf"
     out="$(week_occurrences "$dlx_conf" 2026-08-10 3)"
     assert_eq "DAY_LABEL doesn't break EXCLUDE_WEEKS: week 3's mon row is excluded, only thu's Studio5 remains" \
-        "studio|Studio|Studio5|2026-08-13|thu|B|instructor,student" "$out"
+        "studio|Studio|Studio5|2026-08-13|thu|B|instructor,student|" "$out"
     out="$(week_occurrences "$dlx_conf" 2026-08-10 4 | head -1 | cut -d'|' -f3)"
     assert_eq "DAY_LABEL doesn't break {count}: week 4 mon is Studio6, no gap/shift from the exclusion" \
         "Studio6" "$out"
@@ -133,6 +133,33 @@ studio|B|Thu-Fri (Studio B)" "$out"
     out="$(week_occurrences "$bad_conf" 2026-08-10 1 2>&1 >/dev/null)"
     assert_contains "week_occurrences: bad-weekday error message names the kind" "$out" "lecture"
     rm -f "$bad_conf"
+
+    # CANCEL_EXTRA_WEEKDAYS (11th field): a studio meeting Monday AND
+    # Tuesday with the same material declares WEEKDAY=mon,
+    # CANCEL_EXTRA_WEEKDAYS=tue -- week_occurrences computes Tuesday's
+    # real date too, carried in the new trailing CANCEL_EXTRA_DATES field.
+    local cew_conf
+    cew_conf="$(mktemp)"
+    printf 'studio|Studio|mon|-|S{n}|view,print|1|13|-|-|tue\n' > "$cew_conf"
+    out="$(week_occurrences "$cew_conf" 2026-08-10 1 | cut -d'|' -f8)"
+    assert_eq "CANCEL_EXTRA_WEEKDAYS: single extra weekday's date is computed" \
+        "2026-08-11" "$out"
+
+    printf 'studio|Studio|mon|-|S{n}|view,print|1|13|-|-|tue,wed\n' > "$cew_conf"
+    out="$(week_occurrences "$cew_conf" 2026-08-10 1 | cut -d'|' -f8)"
+    assert_eq "CANCEL_EXTRA_WEEKDAYS: multiple extra weekdays, comma-joined dates" \
+        "2026-08-11,2026-08-12" "$out"
+
+    printf 'studio|Studio|mon|-|S{n}|view,print|1|13|-|-|-\n' > "$cew_conf"
+    out="$(week_occurrences "$cew_conf" 2026-08-10 1 | cut -d'|' -f8)"
+    assert_eq "CANCEL_EXTRA_WEEKDAYS: '-' means no extra dates, field stays empty" \
+        "" "$out"
+
+    printf 'studio|Studio|mon|-|S{n}|view,print|1|13|-\n' > "$cew_conf"
+    out="$(week_occurrences "$cew_conf" 2026-08-10 1 | cut -d'|' -f8)"
+    assert_eq "CANCEL_EXTRA_WEEKDAYS: field omitted entirely, still empty (backward compat)" \
+        "" "$out"
+    rm -f "$cew_conf"
 
     # {count}: flat sequential numbering across occurrences, not
     # week-derived -- e.g. 2 labs/week (mon/A, thu/B) numbered Lab1..LabN

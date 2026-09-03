@@ -351,6 +351,64 @@ EOF
             /dev/null /dev/null https://x /dev/null /dev/null)" \
         "Recess"
 
+    # EXTRA_SLOTS_FILE (HTML side): unlike the markdown renderer, extra
+    # slots here are NOT grouped/deduped by title -- real course-
+    # materials Canvas rendering (render_studio_cell) shows each studio
+    # number as its own independent stacked block, no merging.
+    local es_occ="$scratch/es-occurrences.tsv"
+    printf 'studio|Studio|S3|2026-08-24|mon|-|view,print\n' > "$es_occ"
+    local es_titles="$scratch/es-titles.conf"
+    printf 'S3|A Title\nS3-in-class|A Title\n' > "$es_titles"
+    local es_extra="$scratch/es-extra.conf"
+    printf '3|studio|S3-in-class\n' > "$es_extra"
+    out="$(render_kind_cell_html 3 studio "$es_occ" "$es_titles" /dev/null /dev/null https://x /dev/null /dev/null \
+        "" "" "" "" "" "" "$es_extra")"
+    assert_contains "extra slot's own title block appears" "$out" "S3-in-class: A Title"
+    assert_contains "primary occurrence's title block also appears" "$out" "S3: A Title"
+    local block_count
+    block_count="$(echo "$out" | grep -o 'font-weight:600;' | wc -l | tr -d ' ')"
+    assert_eq "two independent stacked blocks, not merged into one" "2" "$block_count"
+
+    out="$(render_kind_cell_html 3 studio "$es_occ" "$es_titles" /dev/null /dev/null https://x /dev/null /dev/null)"
+    assert_not_contains "no extra_slots_file: extra slot never looked up" "$out" "S3-in-class"
+
+    # A holiday-cancelled primary occurrence skips extra slots entirely
+    # (they ride along with the session that didn't happen).
+    local es_holidays="$scratch/es-holidays.conf"
+    printf '2026-08-24|Test Holiday\n' > "$es_holidays"
+    out="$(render_kind_cell_html 3 studio "$es_occ" "$es_titles" /dev/null /dev/null https://x "$es_holidays" /dev/null \
+        "" "" "" "" "" "" "$es_extra")"
+    assert_contains "cancelled primary still shows its own cancellation" "$out" "No Studio"
+    assert_not_contains "cancelled primary: extra slot suppressed too" "$out" "S3-in-class"
+
+    # render_html_calendar end to end: the 18th positional param threads
+    # through to render_kind_cell_html.
+    local es_kinds2="$scratch/es-kinds2.conf"
+    printf 'studio|Studio|mon|-|S{n}|view,print|1|13|-\n' > "$es_kinds2"
+    out="$(render_html_calendar "$es_kinds2" 2026-08-10 3 0 "$es_titles" /dev/null \
+        /dev/null /dev/null https://x /dev/null /dev/null "" "" "" "" "" "" "$es_extra")"
+    assert_contains "render_html_calendar: EXTRA_SLOTS_FILE threads through end to end" \
+        "$out" "S3-in-class: A Title"
+
+    # CANCEL_EXTRA_WEEKDAYS: an occurrence declared mon + "tue" extra
+    # must be cancelled by a holiday landing on EITHER day -- HTML side
+    # of the same real studio Mon+Tue combined-cell need.
+    local cew_kinds="$scratch/cew-kinds.conf"
+    printf 'studio|Studio|mon|-|S{n}|view,print|1|13|-|-|tue\n' > "$cew_kinds"
+    local cew_holidays="$scratch/cew-holidays.conf"
+    printf '2026-08-11|Test Holiday\n' > "$cew_holidays"
+    out="$(render_html_calendar "$cew_kinds" 2026-08-10 1 0 /dev/null /dev/null \
+        /dev/null /dev/null https://x "$cew_holidays" /dev/null)"
+    assert_contains "a holiday on the EXTRA weekday still cancels the occurrence" \
+        "$out" "No Studio (Test Holiday)"
+
+    printf '2026-08-12|Test Holiday\n' > "$cew_holidays"
+    out="$(render_html_calendar "$cew_kinds" 2026-08-10 1 0 /dev/null /dev/null \
+        /dev/null /dev/null https://x "$cew_holidays" /dev/null)"
+    assert_not_contains "a holiday on neither weekday doesn't cancel anything" \
+        "$out" "No Studio"
+    assert_contains "the occurrence still renders normally" "$out" "S1"
+
     # week_holiday_notes wired into the Notes column: a holiday landing
     # on a day this kind doesn't meet (kinds is wed-only; Thursday isn't)
     # must still surface in Notes -- same real gap render-markdown.test.sh

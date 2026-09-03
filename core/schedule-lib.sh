@@ -76,6 +76,17 @@
 #                 precision that isn't real. No effect on a kind with
 #                 only one weekly occurrence (that gets one merged
 #                 column, no weekday in its header at all).
+#   CANCEL_EXTRA_WEEKDAYS optional 11th field (omit entirely, or "-"):
+#                 comma-separated weekday names (e.g. "tue") this same
+#                 occurrence ALSO spans, for a session that meets across
+#                 more than one calendar day with the same material (e.g.
+#                 a studio held Monday AND Tuesday) -- a holiday landing
+#                 on ANY of these days, not just WEEKDAY's own, still
+#                 cancels the occurrence (see enrich-lib.sh's
+#                 occurrence_holiday). Purely a cancellation check: these
+#                 extra days don't get their own slot ID, column, or
+#                 count -- the occurrence is still exactly one row, one
+#                 SLOT_ID, same as a course that never sets this field.
 #
 # Comment lines (leading #) and blank lines are ignored, same convention
 # as every other .conf file in this ecosystem.
@@ -137,9 +148,9 @@ format_slot_id() {
 # semester has few enough weeks/rows that re-scanning is negligible.
 occurrence_count() {
     local conf_file="$1" kind_id="$2" target_week="$3" target_weekday="$4" target_suffix="$5"
-    local k l w s sp v ws we ew dl week count=0
+    local k l w s sp v ws we ew dl cew week count=0
     for ((week = 1; week <= target_week; week++)); do
-        while IFS='|' read -r k l w s sp v ws we ew dl; do
+        while IFS='|' read -r k l w s sp v ws we ew dl cew; do
             [ -z "$k" ] && continue
             case "$k" in \#*) continue ;; esac
             [ "$k" = "$kind_id" ] || continue
@@ -160,7 +171,17 @@ occurrence_count() {
 # week_occurrences CONF_FILE WEEK_MONDAY TEACHING_WEEK -> one line per
 # active occurrence for that teaching week, in CONF_FILE's own row order:
 #
-#   KIND_ID|LABEL|SLOT_ID|DATE|WEEKDAY|SUFFIX|VARIANTS
+#   KIND_ID|LABEL|SLOT_ID|DATE|WEEKDAY|SUFFIX|VARIANTS|CANCEL_EXTRA_DATES
+#
+# CANCEL_EXTRA_DATES (comma-separated YYYY-MM-DD, empty if the row's
+# optional 11th field CANCEL_EXTRA_WEEKDAYS was omitted/"-") is the real
+# calendar date of each extra weekday this one occurrence also spans --
+# e.g. a studio that meets Monday AND Tuesday with the same material
+# declares WEEKDAY=mon, CANCEL_EXTRA_WEEKDAYS=tue, and this field then
+# carries Tuesday's actual date so a caller (enrich-lib.sh's
+# occurrence_holiday) can check both days for a holiday without knowing
+# any weekday names itself -- DATE alone still names the day WEEKDAY
+# resolves to, unchanged from before this field existed.
 #
 # A row is "active" for TEACHING_WEEK when WEEK_START <= TEACHING_WEEK <=
 # WEEK_END AND TEACHING_WEEK isn't listed in the row's optional 9th field,
@@ -180,9 +201,9 @@ occurrence_count() {
 # produce their own line, distinguished by SUFFIX/SLOT_ID.
 week_occurrences() {
     local conf_file="$1" week_monday="$2" teaching_week="$3"
-    local line kind_id label weekday suffix slot_pattern variants week_start week_end exclude_weeks day_label
-    local date slot_id count
-    while IFS='|' read -r kind_id label weekday suffix slot_pattern variants week_start week_end exclude_weeks day_label; do
+    local line kind_id label weekday suffix slot_pattern variants week_start week_end exclude_weeks day_label cancel_extra_weekdays
+    local date slot_id count cancel_extra_dates
+    while IFS='|' read -r kind_id label weekday suffix slot_pattern variants week_start week_end exclude_weeks day_label cancel_extra_weekdays; do
         [ -z "$kind_id" ] && continue
         case "$kind_id" in \#*) continue ;; esac
         if [ "$teaching_week" -lt "$week_start" ] || [ "$teaching_week" -gt "$week_end" ]; then
@@ -202,8 +223,23 @@ week_occurrences() {
             *'{count}'*) count="$(occurrence_count "$conf_file" "$kind_id" "$teaching_week" "$weekday" "$suffix")" ;;
         esac
         slot_id="$(format_slot_id "$slot_pattern" "$teaching_week" "$suffix" "$count")"
-        printf '%s|%s|%s|%s|%s|%s|%s\n' \
-            "$kind_id" "$label" "$slot_id" "$date" "$weekday" "$suffix" "$variants"
+        cancel_extra_dates=""
+        if [ -n "$cancel_extra_weekdays" ] && [ "$cancel_extra_weekdays" != "-" ]; then
+            local extra_wd extra_date
+            local IFS_SAVE="$IFS"
+            IFS=','
+            for extra_wd in $cancel_extra_weekdays; do
+                IFS="$IFS_SAVE"
+                extra_date="$(occurrence_date "$week_monday" "$extra_wd")" || {
+                    echo "week_occurrences: bad weekday '$extra_wd' in CANCEL_EXTRA_WEEKDAYS for kind '$kind_id'" >&2
+                    return 1
+                }
+                cancel_extra_dates="${cancel_extra_dates:+$cancel_extra_dates,}$extra_date"
+            done
+            IFS="$IFS_SAVE"
+        fi
+        printf '%s|%s|%s|%s|%s|%s|%s|%s\n' \
+            "$kind_id" "$label" "$slot_id" "$date" "$weekday" "$suffix" "$variants" "$cancel_extra_dates"
     done < <(grep -vE '^\s*#|^\s*$' "$conf_file")
 }
 
@@ -235,9 +271,9 @@ weekday_full_name() {
 # field, empty if that row didn't set one.
 kind_suffixes() {
     local conf_file="$1" kind_id="$2"
-    local k l w s sp v ws we ew dl
+    local k l w s sp v ws we ew dl cew
     local seen=""
-    while IFS='|' read -r k l w s sp v ws we ew dl; do
+    while IFS='|' read -r k l w s sp v ws we ew dl cew; do
         [ -z "$k" ] && continue
         case "$k" in \#*) continue ;; esac
         [ "$k" = "$kind_id" ] || continue
