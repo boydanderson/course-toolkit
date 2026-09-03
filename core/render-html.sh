@@ -230,7 +230,13 @@ render_kind_cell_html() {
 }
 
 # render_html_calendar -- same signature as render-markdown.sh's
-# render_markdown_calendar, HTML `<table>` output. PALETTE (12th,
+# render_markdown_calendar, HTML `<table>` output, including the same
+# "Recess" row (all dashes, cancelled-styled note) inserted when
+# RECESS_AFTER_WEEK > 0 -- see that function's own comment and
+# semester-lib.sh's semester_recess_week. Not counted toward row_index
+# (so real teaching weeks' odd/even banding stays undisturbed by
+# whether a recess row was inserted) and not current-week-highlighted
+# (it's never "this week" in the teaching-week sense). PALETTE (12th,
 # optional) is _calendar_palette's opaque string; see that function's
 # comment. TODAY (13th, optional, YYYY-MM-DD) drives current-week
 # highlighting -- defaults to the live date (SGT) if omitted, or pass a
@@ -278,9 +284,28 @@ render_html_calendar() {
     printf '<th style="%s">Notes</th>' "$th_style"
     echo '</tr></thead><tbody>'
 
+    local recess_dates recess_monday="" recess_friday=""
+    recess_dates="$(semester_recess_week "$start_monday" "$recess_after")"
+    if [ -n "$recess_dates" ]; then
+        recess_monday="${recess_dates%%|*}"
+        recess_friday="${recess_dates##*|}"
+    fi
+
     local occ_file row_index=0
     occ_file="$(mktemp)"
     while IFS='|' read -r teaching_week monday; do
+        if [ -n "$recess_monday" ] && [ "$teaching_week" -eq "$((recess_after + 1))" ]; then
+            local recess_td="${td_style}color:${CAL_CANCELLED};"
+            echo '<tr>'
+            printf '<td style="%sfont-weight:bold;">Recess</td>' "$td_style"
+            for ((i = 0; i < ${#col_kind[@]}; i++)); do
+                printf '<td style="%s">-</td>' "$td_style"
+            done
+            printf '<td style="%s">🏖️ Recess Week - No classes (%s - %s)</td>' \
+                "$recess_td" "$recess_monday" "$recess_friday"
+            echo '</tr>'
+        fi
+
         row_index=$((row_index + 1))
 
         # "Today falls inside this teaching week's Monday..Sunday span"

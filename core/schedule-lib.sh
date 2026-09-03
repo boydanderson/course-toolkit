@@ -65,6 +65,17 @@
 #                 teaching week numbers this occurrence is skipped even
 #                 though it's within WEEK_START..WEEK_END, e.g. "4,6,8"
 #                 for weeks displaced by assessments/holidays.
+#   DAY_LABEL     optional 10th field (omit entirely, or "-"): overrides
+#                 the weekday name a split-column header shows (see
+#                 kind_columns) for this one occurrence -- WEEKDAY still
+#                 has to name one concrete day for the schedule engine's
+#                 own date math (occurrence_date, week_occurrences), but
+#                 a course whose real session isn't pinned to that exact
+#                 day (e.g. "Session 1, some day Mon-Wed") can set
+#                 DAY_LABEL to "Mon-Wed" so the header doesn't assert a
+#                 precision that isn't real. No effect on a kind with
+#                 only one weekly occurrence (that gets one merged
+#                 column, no weekday in its header at all).
 #
 # Comment lines (leading #) and blank lines are ignored, same convention
 # as every other .conf file in this ecosystem.
@@ -169,9 +180,9 @@ occurrence_count() {
 # produce their own line, distinguished by SUFFIX/SLOT_ID.
 week_occurrences() {
     local conf_file="$1" week_monday="$2" teaching_week="$3"
-    local line kind_id label weekday suffix slot_pattern variants week_start week_end exclude_weeks
+    local line kind_id label weekday suffix slot_pattern variants week_start week_end exclude_weeks day_label
     local date slot_id count
-    while IFS='|' read -r kind_id label weekday suffix slot_pattern variants week_start week_end exclude_weeks; do
+    while IFS='|' read -r kind_id label weekday suffix slot_pattern variants week_start week_end exclude_weeks day_label; do
         [ -z "$kind_id" ] && continue
         case "$kind_id" in \#*) continue ;; esac
         if [ "$teaching_week" -lt "$week_start" ] || [ "$teaching_week" -gt "$week_end" ]; then
@@ -215,22 +226,24 @@ weekday_full_name() {
 }
 
 # kind_suffixes CONF_FILE KIND_ID -> one line per distinct SUFFIX
-# declared for KIND_ID, in file order: "SUFFIX|WEEKDAY|LABEL". A kind
-# with a single weekly occurrence has exactly one row (SUFFIX "-"); a
-# kind with several (e.g. two lectures/week) has one row per occurrence
-# -- for a renderer deciding whether a kind needs one merged column or
-# one column per occurrence (see render-markdown.sh/render-html.sh).
+# declared for KIND_ID, in file order: "SUFFIX|WEEKDAY|LABEL|DAY_LABEL".
+# A kind with a single weekly occurrence has exactly one row (SUFFIX
+# "-"); a kind with several (e.g. two lectures/week) has one row per
+# occurrence -- for a renderer deciding whether a kind needs one merged
+# column or one column per occurrence (see render-markdown.sh/
+# render-html.sh). DAY_LABEL is session-kinds.conf's own optional 10th
+# field, empty if that row didn't set one.
 kind_suffixes() {
     local conf_file="$1" kind_id="$2"
-    local k l w s sp v ws we ew
+    local k l w s sp v ws we ew dl
     local seen=""
-    while IFS='|' read -r k l w s sp v ws we ew; do
+    while IFS='|' read -r k l w s sp v ws we ew dl; do
         [ -z "$k" ] && continue
         case "$k" in \#*) continue ;; esac
         [ "$k" = "$kind_id" ] || continue
         case ",${seen}," in *",${s},"*) continue ;; esac
         seen="${seen:+$seen,}$s"
-        printf '%s|%s|%s\n' "$s" "$w" "$l"
+        printf '%s|%s|%s|%s\n' "$s" "$w" "$l" "$dl"
     done < <(grep -vE '^\s*#|^\s*$' "$conf_file")
 }
 
@@ -257,7 +270,13 @@ _capitalize() {
 # instead, since cramming e.g. two weekly sessions into one cell loses
 # which weekday each one is on -- HEADER then follows cs1101s/course-
 # materials' own real convention, "Wednesday (Lecture A)"
-# (WeekdayFullName (Label Suffix)).
+# (WeekdayFullName (Label Suffix)), unless that row's own DAY_LABEL
+# (session-kinds.conf's optional 10th field) overrides the weekday
+# portion -- for a course whose real session isn't pinned to one fixed
+# weekday (e.g. "Session 1, some day Mon-Wed" -- WEEKDAY still has to
+# name one concrete day for the schedule engine's own date math, but the
+# column header can say "Mon-Wed" instead of asserting a specific day
+# that isn't actually fixed).
 kind_columns() {
     local conf_file="$1"
     local -a kind_ids
@@ -269,10 +288,14 @@ kind_columns() {
         if [ "${#suf_lines[@]}" -le 1 ]; then
             printf '%s||%s\n' "$k" "$(_capitalize "$k")"
         else
-            local sl suf wd lbl wd_full
+            local sl suf wd lbl dl wd_full
             for sl in "${suf_lines[@]}"; do
-                IFS='|' read -r suf wd lbl <<< "$sl"
-                wd_full="$(weekday_full_name "$wd")"
+                IFS='|' read -r suf wd lbl dl <<< "$sl"
+                if [ -n "$dl" ]; then
+                    wd_full="$dl"
+                else
+                    wd_full="$(weekday_full_name "$wd")"
+                fi
                 printf '%s|%s|%s (%s %s)\n' "$k" "$suf" "$wd_full" "$lbl" "$suf"
             done
         fi

@@ -198,8 +198,11 @@ render_kind_cell() {
 # week, one column per distinct kind (in session-kinds.conf's
 # first-appearance order -- split into one column per occurrence for a
 # kind with more than one/week, see schedule-lib.sh's kind_columns) plus
-# a trailing
-# Notes column. HOLIDAYS_FILE/EMOJI_FILE are optional -- pass
+# a trailing Notes column. If RECESS_AFTER_WEEK > 0, a "Recess" row (all
+# dashes, plus a "🏖️ Recess Week - No classes (dates)" note) is inserted
+# between that teaching week and the next -- see semester-lib.sh's
+# semester_recess_week, ported from cs1101s/course-materials' own
+# equivalent row. HOLIDAYS_FILE/EMOJI_FILE are optional -- pass
 # "/dev/null" (or any nonexistent path) for either to disable holiday-
 # cancellation rendering entirely. KIND_EXTRA_LINKS_FILE (a
 # KIND_ID|LABEL file) and EXTRA_LINKS_FILE (a SLOT_ID|URL file) are both
@@ -235,9 +238,25 @@ render_markdown_calendar() {
     echo "$header"
     echo "$sep"
 
+    local recess_dates recess_monday="" recess_friday=""
+    recess_dates="$(semester_recess_week "$start_monday" "$recess_after")"
+    if [ -n "$recess_dates" ]; then
+        recess_monday="${recess_dates%%|*}"
+        recess_friday="${recess_dates##*|}"
+    fi
+
     local occ_file
     occ_file="$(mktemp)"
     while IFS='|' read -r teaching_week monday; do
+        if [ -n "$recess_monday" ] && [ "$teaching_week" -eq "$((recess_after + 1))" ]; then
+            local recess_row="| Recess |"
+            for ((i = 0; i < ${#col_kind[@]}; i++)); do
+                recess_row="${recess_row} - |"
+            done
+            recess_row="${recess_row} 🏖️ Recess Week - No classes (${recess_monday} - ${recess_friday}) |"
+            echo "$recess_row"
+        fi
+
         week_occurrences "$kinds_conf" "$monday" "$teaching_week" > "$occ_file"
         local row="| $teaching_week |"
         for ((i = 0; i < ${#col_kind[@]}; i++)); do

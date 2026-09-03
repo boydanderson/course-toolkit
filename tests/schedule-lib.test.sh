@@ -31,10 +31,10 @@ test_schedule_lib() {
     } > "$ks_conf"
     out="$(kind_suffixes "$ks_conf" lecture)"
     assert_eq "kind_suffixes: lecture has 2 rows, in file order" \
-        "A|wed|Lecture
-B|fri|Lecture" "$out"
+        "A|wed|Lecture|
+B|fri|Lecture|" "$out"
     out="$(kind_suffixes "$ks_conf" quiz)"
-    assert_eq "kind_suffixes: a single-occurrence kind has exactly one row" "-|sat|Quiz" "$out"
+    assert_eq "kind_suffixes: a single-occurrence kind has exactly one row" "-|sat|Quiz|" "$out"
 
     out="$(kind_columns "$ks_conf")"
     assert_eq "kind_columns: a multi-occurrence kind splits, a single one doesn't" \
@@ -42,6 +42,30 @@ B|fri|Lecture" "$out"
 lecture|B|Friday (Lecture B)
 quiz||Quiz" "$out"
     rm -f "$ks_conf"
+
+    # DAY_LABEL (optional 10th field): overrides a split column's
+    # weekday header for a course whose real session isn't pinned to one
+    # fixed day (e.g. "Session 1, some day Mon-Wed") -- WEEKDAY still has
+    # to name one concrete day for the schedule engine's own date math.
+    local dl_conf
+    dl_conf="$(mktemp)"
+    {
+        printf 'studio|Studio|mon|A|Studio{count}|instructor,student|1|9|-|Mon-Wed\n'
+        printf 'studio|Studio|thu|B|Studio{count}|instructor,student|1|9|-|Thu-Fri\n'
+    } > "$dl_conf"
+    out="$(kind_suffixes "$dl_conf" studio)"
+    assert_eq "kind_suffixes: DAY_LABEL passes through as the 4th field" \
+        "A|mon|Studio|Mon-Wed
+B|thu|Studio|Thu-Fri" "$out"
+    out="$(kind_columns "$dl_conf")"
+    assert_eq "kind_columns: DAY_LABEL overrides the header's weekday portion" \
+        "studio|A|Mon-Wed (Studio A)
+studio|B|Thu-Fri (Studio B)" "$out"
+    # A row's own WEEKDAY still drives real date math even when its
+    # header is overridden -- DAY_LABEL is display-only.
+    assert_eq "week_occurrences still uses the real WEEKDAY for date math, not DAY_LABEL" \
+        "2026-08-10" "$(week_occurrences "$dl_conf" 2026-08-10 1 | head -1 | cut -d'|' -f4)"
+    rm -f "$dl_conf"
 
     # occurrence_date
     assert_eq "occurrence_date mon = week_monday" "2026-08-10" "$(occurrence_date 2026-08-10 mon)"

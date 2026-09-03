@@ -20,4 +20,15 @@ test_semester_lib() {
         "2026-08-03|2026-11-13" "$(semester_term_window 2026-08-10 13 0)"
     assert_eq "semester_term_window: custom buffer=0 gives the exact term span" \
         "2026-08-10|2026-11-13" "$(semester_term_window 2026-08-10 13 6 0)"
+
+    # semester_recess_week: the one skipped calendar week between
+    # RECESS_AFTER_WEEK and RECESS_AFTER_WEEK+1 -- verified against real
+    # cs1101s/course-materials data (its own row-insertion computation:
+    # week 6's Monday, 2026-09-14, + 7 days).
+    assert_eq "semester_recess_week: real recess-after-6 data" \
+        "2026-09-21|2026-09-25" "$(semester_recess_week 2026-08-10 6)"
+    assert_eq "semester_recess_week: no recess (0) -> empty" \
+        "" "$(semester_recess_week 2026-08-10 0)"
+    assert_eq "semester_recess_week: no recess (omitted) -> empty" \
+        "" "$(semester_recess_week 2026-08-10)"
 }

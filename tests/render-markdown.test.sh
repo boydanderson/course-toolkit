@@ -183,5 +183,26 @@ EOF
     assert_not_contains "occasion: no Details/Papers text without the file" \
         "$week4_row" "Details"
 
+    # Recess row: inserted between teaching weeks RECESS_AFTER_WEEK and
+    # RECESS_AFTER_WEEK+1 when RECESS_AFTER_WEEK > 0 -- matches
+    # cs1101s/course-materials' own real row-insertion computation
+    # (semester_recess_week, tested directly in semester-lib.test.sh).
+    out="$(render_markdown_calendar "$kinds" 2026-08-10 4 2 "$titles" "$allowlist" \
+        /dev/null /dev/null https://x /dev/null /dev/null)"
+    assert_contains "recess row appears" "$out" \
+        "| Recess | - | - | 🏖️ Recess Week - No classes (2026-08-24 - 2026-08-28) |"
+    local recess_pos week2_pos week3_pos
+    recess_pos=$(echo "$out" | grep -bo "^| Recess |" | head -1 | cut -d: -f1)
+    week2_pos=$(echo "$out" | grep -bo "^| 2 |" | head -1 | cut -d: -f1)
+    week3_pos=$(echo "$out" | grep -bo "^| 3 |" | head -1 | cut -d: -f1)
+    assert_success "recess row sits after week 2" [ "$week2_pos" -lt "$recess_pos" ]
+    assert_success "recess row sits before week 3" [ "$recess_pos" -lt "$week3_pos" ]
+
+    # RECESS_AFTER_WEEK=0 (every test above) -- no recess row at all.
+    assert_not_contains "no recess: no Recess row" \
+        "$(render_markdown_calendar "$kinds" 2026-08-10 4 0 "$titles" "$allowlist" \
+            /dev/null /dev/null https://x /dev/null /dev/null)" \
+        "Recess"
+
     rm -rf "$scratch"
 }

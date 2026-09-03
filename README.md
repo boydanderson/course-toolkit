@@ -52,7 +52,7 @@ for every renderer-specific step.
   `KIND_ID`):
 
   ```
-  KIND_ID|LABEL|WEEKDAY|SUFFIX|SLOT_PATTERN|VARIANTS|WEEK_START|WEEK_END|EXCLUDE_WEEKS
+  KIND_ID|LABEL|WEEKDAY|SUFFIX|SLOT_PATTERN|VARIANTS|WEEK_START|WEEK_END|EXCLUDE_WEEKS|DAY_LABEL
   ```
 
   | Field | Meaning |
@@ -65,10 +65,28 @@ for every renderer-specific step.
   | `VARIANTS` | comma-separated build-artifact variants, e.g. `view,print`, `problem,solution`, or `none` for one undifferentiated PDF |
   | `WEEK_START`, `WEEK_END` | inclusive teaching-week bounds this occurrence is active for |
   | `EXCLUDE_WEEKS` | optional (omit, or `-`): comma-separated week numbers to skip within that range, e.g. `4,6,10,12` for assessment-displaced weeks |
+  | `DAY_LABEL` | optional 10th field (omit entirely, or `-`): overrides the weekday name a split column's header shows for this one occurrence (see "Column splitting" below) — `WEEKDAY` still has to name one concrete day for the schedule engine's own date math, but a course whose real session isn't pinned to that exact day (e.g. "Session 1, some day Mon-Wed") can set `DAY_LABEL` to `Mon-Wed` so the header doesn't assert a precision that isn't real |
 
   This is what makes "2 lectures a week" vs. "1 lecture + 1 recitation +
   1 lab a week" — and a real course's irregular exceptions — expressible
   as data, not code.
+
+  **Column splitting**: a kind with only one weekly occurrence gets one
+  merged calendar column (headered with its capitalized `KIND_ID`,
+  unchanged from before this existed). A kind with more than one (e.g.
+  two lectures/week) instead gets one column per occurrence, since
+  cramming both into one cell loses which weekday each falls on — headers
+  read `"Wednesday (Lecture A)"` (`WeekdayFullName (Label Suffix)`, or
+  `DAY_LABEL` in place of the weekday name if that row set one). Automatic
+  for `render_markdown_calendar`/`render_html_calendar`/`cli readme`/
+  `cli canvas` — no separate opt-in, just however many rows a `KIND_ID`
+  has in `session-kinds.conf`.
+
+  **Recess row**: when `RECESS_AFTER_WEEK` (see `config/course.mk` below)
+  is nonzero, both renderers also insert a "Recess" row (dashes in every
+  column, a "🏖️ Recess Week - No classes (dates)" note) between that
+  teaching week and the next — see `core/semester-lib.sh`'s
+  `semester_recess_week`.
 - **A content-to-slot map** — `SLOT_ID|SOURCE_PATH` pairs, so the build
   knows which file backs each scheduled slot. No fixed naming
   convention is assumed — lay content out however suits the course.

@@ -46,3 +46,19 @@ semester_term_window() {
     window_end="$(add_days "$last_friday" "$buffer")"
     printf '%s|%s\n' "$window_start" "$window_end"
 }
+
+# semester_recess_week START_MONDAY [RECESS_AFTER_WEEK] -> "MONDAY|FRIDAY"
+# for the one calendar week skipped between teaching weeks
+# RECESS_AFTER_WEEK and RECESS_AFTER_WEEK+1, or empty output if
+# RECESS_AFTER_WEEK is 0 (no recess) -- for a renderer that wants to
+# show a "Recess" row in its own calendar table (see render-markdown.sh/
+# render-html.sh), not itself part of semester_weeks' teaching-week
+# output.
+semester_recess_week() {
+    local start_monday="$1" recess_after_week="${2:-0}"
+    [ "$recess_after_week" -le 0 ] && return 0
+    local recess_monday recess_friday
+    recess_monday="$(add_days "$start_monday" "$((recess_after_week * 7))")"
+    recess_friday="$(add_days "$recess_monday" 4)"
+    printf '%s|%s\n' "$recess_monday" "$recess_friday"
+}
