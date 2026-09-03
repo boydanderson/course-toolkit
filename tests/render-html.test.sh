@@ -32,6 +32,22 @@ test_render_html() {
     assert_contains "holiday cancellation renders in the cancelled style" "$out" "No Lecture (🎉 Test Holiday)"
     assert_contains "cancellation is styled distinctly (bold red)" "$out" "font-weight:600;color:#c0392b;"
 
+    # CONFLICT_HOLIDAY (9th column in week_occurrences' own output, see
+    # schedule-lib.sh's HOLIDAY_CONFLICT_WEEKS): overrides the
+    # cancellation branch above -- renders normally (title + links) with
+    # a "⚠️ " prefix instead, for a collision the maintainer has already
+    # reviewed and decided to hold anyway.
+    local conflict_occ="$scratch/conflict-occurrences.tsv"
+    printf 'lecture|Lecture|L4A|2026-08-12|wed|A|view,print||Test Holiday\n' > "$conflict_occ"
+    local conflict_cell
+    conflict_cell="$(render_kind_cell_html 4 lecture "$conflict_occ" "$titles" "$allowlist" /dev/null https://example.org/pdfs "$holidays" "$emoji")"
+    assert_contains "CONFLICT_HOLIDAY: occurrence renders normally with the warning prefix" \
+        "$conflict_cell" "⚠️ L4A: A Real Title"
+    assert_not_contains "CONFLICT_HOLIDAY: does not show the usual cancellation text" \
+        "$conflict_cell" "No Lecture"
+    assert_contains "CONFLICT_HOLIDAY: still gets its real released link" \
+        "$conflict_cell" '<a href="https://example.org/pdfs/lecture-L4A.view.pdf">View</a>'
+
     # _html_escape -- a title containing HTML-significant characters must
     # come out escaped, not passed through raw (which would either break
     # the table's markup or silently swallow the text depending on the
@@ -380,6 +396,18 @@ EOF
         "" "" "" "" "" "" "$es_extra")"
     assert_contains "cancelled primary still shows its own cancellation" "$out" "No Studio"
     assert_not_contains "cancelled primary: extra slot suppressed too" "$out" "S3-in-class"
+
+    # CONFLICT_HOLIDAY does NOT set any_cancelled -- unlike a real
+    # cancellation above, an extra slot sharing this week+kind still
+    # renders (the session is deliberately being held, not skipped).
+    local es_conflict_occ="$scratch/es-conflict-occurrences.tsv"
+    printf 'studio|Studio|S3|2026-08-24|mon|-|view,print||Test Holiday\n' > "$es_conflict_occ"
+    out="$(render_kind_cell_html 3 studio "$es_conflict_occ" "$es_titles" /dev/null /dev/null https://x /dev/null /dev/null \
+        "" "" "" "" "" "" "$es_extra")"
+    assert_contains "CONFLICT_HOLIDAY: primary occurrence renders with the warning prefix" \
+        "$out" "⚠️ S3: A Title"
+    assert_contains "CONFLICT_HOLIDAY: extra slot still renders too (not suppressed)" \
+        "$out" "S3-in-class: A Title"
 
     # render_html_calendar end to end: the 18th positional param threads
     # through to render_kind_cell_html.

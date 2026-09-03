@@ -101,6 +101,23 @@
 #                 week (e.g. epp2-toolkit-poc's Studio{count}); a
 #                 week-derived slot ID like L4A names the week it's
 #                 shown in by construction, so it isn't a candidate.
+#   HOLIDAY_CONFLICT_WEEKS optional 13th field (omit entirely, or "-"):
+#                 comma-separated teaching week numbers where a holiday
+#                 collision is already known and deliberately accepted
+#                 (e.g. the real course already runs a take-home
+#                 activity that week) -- the occurrence should still be
+#                 placed/rendered, not skipped or cancelled. Two effects:
+#                 (1) for a row with AUTO_SHIFT_ON_HOLIDAY set, overrides
+#                 the holiday-skip for a listed week, so the occurrence
+#                 consumes its {count} slot normally instead of shifting
+#                 downstream content forward; (2) for ANY row (with or
+#                 without AUTO_SHIFT_ON_HOLIDAY), week_occurrences' own
+#                 CONFLICT_HOLIDAY output column (see below) tells the
+#                 renderer to show the occurrence normally with a
+#                 warning marker instead of the usual holiday-cancelled
+#                 text. A week listed here where nothing actually
+#                 collides (config drift -- e.g. a holiday later moves)
+#                 is a silent no-op, not an error.
 #
 # Comment lines (leading #) and blank lines are ignored, same convention
 # as every other .conf file in this ecosystem.
@@ -210,12 +227,17 @@ _row_holiday_shift_skip() {
 # single source of truth for that, recess-gap included. A row without
 # AUTO_SHIFT_ON_HOLIDAY set, or a caller that omits these three params
 # entirely, behaves exactly as before this existed.
+#
+# A week listed in the row's own HOLIDAY_CONFLICT_WEEKS (13th field)
+# overrides the skip above -- the occurrence is deliberately held in
+# place despite the collision (see schedule-lib.sh's own format-doc
+# comment), so it still consumes a count like any other eligible week.
 occurrence_count() {
     local conf_file="$1" kind_id="$2" target_week="$3" target_weekday="$4" target_suffix="$5"
     local holidays_file="${6:-}" start_monday="${7:-}" recess_after_week="${8:-}"
-    local k l w s sp v ws we ew dl cew ashw week count=0
+    local k l w s sp v ws we ew dl cew ashw hcw week count=0
     for ((week = 1; week <= target_week; week++)); do
-        while IFS='|' read -r k l w s sp v ws we ew dl cew ashw; do
+        while IFS='|' read -r k l w s sp v ws we ew dl cew ashw hcw; do
             [ -z "$k" ] && continue
             case "$k" in \#*) continue ;; esac
             [ "$k" = "$kind_id" ] || continue
@@ -227,7 +249,11 @@ occurrence_count() {
                 local this_week_monday
                 this_week_monday="$(semester_weeks "$start_monday" "$week" "$recess_after_week" | tail -1 | cut -d'|' -f2)"
                 if _row_holiday_shift_skip "$this_week_monday" "$w" "$cew" "$holidays_file"; then
-                    continue
+                    local conflict_override=0
+                    if [ -n "$hcw" ] && [ "$hcw" != "-" ]; then
+                        case ",${hcw}," in *",${week},"*) conflict_override=1 ;; esac
+                    fi
+                    [ "$conflict_override" -eq 0 ] && continue
                 fi
             fi
             count=$((count + 1))
@@ -244,7 +270,7 @@ occurrence_count() {
 # [START_MONDAY] [RECESS_AFTER_WEEK] -> one line per active occurrence
 # for that teaching week, in CONF_FILE's own row order:
 #
-#   KIND_ID|LABEL|SLOT_ID|DATE|WEEKDAY|SUFFIX|VARIANTS|CANCEL_EXTRA_DATES
+#   KIND_ID|LABEL|SLOT_ID|DATE|WEEKDAY|SUFFIX|VARIANTS|CANCEL_EXTRA_DATES|CONFLICT_HOLIDAY
 #
 # HOLIDAYS_FILE/START_MONDAY/RECESS_AFTER_WEEK (all optional, needed
 # together) enable a row's optional 12th field, AUTO_SHIFT_ON_HOLIDAY
@@ -262,6 +288,20 @@ occurrence_count() {
 # calendar Monday to check, via semester_weeks. A row without
 # AUTO_SHIFT_ON_HOLIDAY set, or a caller that omits these three params,
 # behaves exactly as before this existed.
+#
+# CONFLICT_HOLIDAY (empty unless this occurrence's week is listed in the
+# row's own HOLIDAY_CONFLICT_WEEKS, 13th field, AND actually collides
+# with a HOLIDAYS_FILE entry) is the colliding holiday's name -- lets a
+# caller (render-markdown.sh/render-html.sh's render_kind_cell(_html))
+# render the occurrence normally with a warning marker instead of the
+# usual holiday-cancelled text, for a collision the maintainer has
+# already reviewed and deliberately decided to hold anyway (e.g. a
+# take-home activity that still happens, just not in person). Populated
+# regardless of whether AUTO_SHIFT_ON_HOLIDAY is set on this row -- the
+# display effect and the placement-skip override (above) are two
+# independent consequences of the same HOLIDAY_CONFLICT_WEEKS field, not
+# coupled to each other. A row without HOLIDAY_CONFLICT_WEEKS set always
+# gets an empty field here, unchanged from before this existed.
 #
 # CANCEL_EXTRA_DATES (comma-separated YYYY-MM-DD, empty if the row's
 # optional 11th field CANCEL_EXTRA_WEEKDAYS was omitted/"-") is the real
@@ -292,9 +332,9 @@ occurrence_count() {
 week_occurrences() {
     local conf_file="$1" week_monday="$2" teaching_week="$3"
     local holidays_file="${4:-}" start_monday="${5:-}" recess_after_week="${6:-}"
-    local line kind_id label weekday suffix slot_pattern variants week_start week_end exclude_weeks day_label cancel_extra_weekdays auto_shift_on_holiday
-    local date slot_id count cancel_extra_dates
-    while IFS='|' read -r kind_id label weekday suffix slot_pattern variants week_start week_end exclude_weeks day_label cancel_extra_weekdays auto_shift_on_holiday; do
+    local line kind_id label weekday suffix slot_pattern variants week_start week_end exclude_weeks day_label cancel_extra_weekdays auto_shift_on_holiday holiday_conflict_weeks
+    local date slot_id count cancel_extra_dates conflict_holiday is_conflict_week
+    while IFS='|' read -r kind_id label weekday suffix slot_pattern variants week_start week_end exclude_weeks day_label cancel_extra_weekdays auto_shift_on_holiday holiday_conflict_weeks; do
         [ -z "$kind_id" ] && continue
         case "$kind_id" in \#*) continue ;; esac
         if [ -n "$auto_shift_on_holiday" ] && [ "$auto_shift_on_holiday" != "-" ]; then
@@ -314,8 +354,16 @@ week_occurrences() {
                 *",${teaching_week},"*) continue ;;
             esac
         fi
+        is_conflict_week=0
+        if [ -n "$holiday_conflict_weeks" ] && [ "$holiday_conflict_weeks" != "-" ]; then
+            case ",${holiday_conflict_weeks}," in
+                *",${teaching_week},"*) is_conflict_week=1 ;;
+            esac
+        fi
         if [ -n "$auto_shift_on_holiday" ] && [ "$auto_shift_on_holiday" != "-" ] && [ -n "$holidays_file" ]; then
-            _row_holiday_shift_skip "$week_monday" "$weekday" "$cancel_extra_weekdays" "$holidays_file" && continue
+            if _row_holiday_shift_skip "$week_monday" "$weekday" "$cancel_extra_weekdays" "$holidays_file"; then
+                [ "$is_conflict_week" -eq 0 ] && continue
+            fi
         fi
         date="$(occurrence_date "$week_monday" "$weekday")" || {
             echo "week_occurrences: bad weekday '$weekday' for kind '$kind_id'" >&2
@@ -341,8 +389,23 @@ week_occurrences() {
             done
             IFS="$IFS_SAVE"
         fi
-        printf '%s|%s|%s|%s|%s|%s|%s|%s\n' \
-            "$kind_id" "$label" "$slot_id" "$date" "$weekday" "$suffix" "$variants" "$cancel_extra_dates"
+        conflict_holiday=""
+        if [ "$is_conflict_week" -eq 1 ] && [ -n "$holidays_file" ]; then
+            conflict_holiday="$(is_holiday "$date" "$holidays_file")" || true
+            if [ -z "$conflict_holiday" ] && [ -n "$cancel_extra_dates" ]; then
+                local cd
+                local IFS_SAVE2="$IFS"
+                IFS=','
+                for cd in $cancel_extra_dates; do
+                    IFS="$IFS_SAVE2"
+                    conflict_holiday="$(is_holiday "$cd" "$holidays_file")" || true
+                    [ -n "$conflict_holiday" ] && break
+                done
+                IFS="$IFS_SAVE2"
+            fi
+        fi
+        printf '%s|%s|%s|%s|%s|%s|%s|%s|%s\n' \
+            "$kind_id" "$label" "$slot_id" "$date" "$weekday" "$suffix" "$variants" "$cancel_extra_dates" "$conflict_holiday"
     done < <(grep -vE '^\s*#|^\s*$' "$conf_file")
 }
 
@@ -414,9 +477,9 @@ weekday_full_name() {
 # field, empty if that row didn't set one.
 kind_suffixes() {
     local conf_file="$1" kind_id="$2"
-    local k l w s sp v ws we ew dl cew ashw
+    local k l w s sp v ws we ew dl cew ashw hcw
     local seen=""
-    while IFS='|' read -r k l w s sp v ws we ew dl cew ashw; do
+    while IFS='|' read -r k l w s sp v ws we ew dl cew ashw hcw; do
         [ -z "$k" ] && continue
         case "$k" in \#*) continue ;; esac
         [ "$k" = "$kind_id" ] || continue

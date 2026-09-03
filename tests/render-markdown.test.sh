@@ -67,6 +67,23 @@ EOF
         /dev/null /dev/null https://x "$holidays" "$emoji")"
     assert_contains "a holiday date cancels that occurrence" "$out" "No Lecture (🎉 Test Holiday)"
 
+    # CONFLICT_HOLIDAY (9th column in week_occurrences' own output, see
+    # schedule-lib.sh's HOLIDAY_CONFLICT_WEEKS): overrides the
+    # cancellation branch above entirely -- the occurrence renders
+    # normally (title + links) with a "⚠️ " prefix instead, for a
+    # collision the maintainer has already reviewed and decided to hold
+    # anyway.
+    local conflict_occ="$scratch/conflict-occurrences.tsv"
+    printf 'lecture|Lecture|L4A|2026-08-14|wed|A|view,print||Test Holiday\n' > "$conflict_occ"
+    local conflict_cell
+    conflict_cell="$(render_kind_cell 4 lecture "$conflict_occ" "$titles" "$allowlist" /dev/null https://example.org/pdfs "$holidays" "$emoji")"
+    assert_contains "CONFLICT_HOLIDAY: occurrence renders normally with the warning prefix" \
+        "$conflict_cell" "⚠️ L4A: A Real Title"
+    assert_not_contains "CONFLICT_HOLIDAY: does not show the usual cancellation text" \
+        "$conflict_cell" "No Lecture"
+    assert_contains "CONFLICT_HOLIDAY: still gets its real released links" \
+        "$conflict_cell" "[View](https://example.org/pdfs/lecture-L4A.view.pdf)"
+
     # render_kind_cell's awk filter against a MIXED occurrences file (all
     # three kinds present at once, as a real week_occurrences() call
     # would produce) -- every render-markdown test above only ever used
@@ -322,6 +339,21 @@ EOF
     week3_row_es="$(echo "$out" | grep '^| 3 |')"
     assert_contains "render_markdown_calendar: EXTRA_SLOTS_FILE threads through end to end" \
         "$week3_row_es" "A Title ("
+
+    # CONFLICT_HOLIDAY in the extra-slots-grouped code path too: bypasses
+    # grouping entirely, same as a real cancellation already does in
+    # this same loop (an extra slot sharing the cancelled primary's
+    # title already rendered as its own separate, un-merged entry before
+    # this change -- this is that exact existing behavior, extended to
+    # the new conflict case, not a new inconsistency).
+    local es_conflict_occ="$scratch/es-conflict-occurrences.tsv"
+    printf 'studio|Studio|S3|2026-08-24|mon|-|view,print||CNY\n' > "$es_conflict_occ"
+    out="$(render_kind_cell 3 studio "$es_conflict_occ" "$es_titles" /dev/null /dev/null https://x /dev/null /dev/null \
+        "" "" "" "" "" "$es_extra")"
+    assert_contains "CONFLICT_HOLIDAY in the extra-slots-grouped path renders with the warning prefix" \
+        "$out" "⚠️ S3: A Title ("
+    assert_contains "CONFLICT_HOLIDAY in the extra-slots-grouped path: extra slot still its own entry" \
+        "$out" "S3-in-class: A Title ("
     assert_contains "render_markdown_calendar: the merged entry shows both slots" \
         "$week3_row_es" "S3-in-class: "
 

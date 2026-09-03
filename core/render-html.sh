@@ -203,6 +203,15 @@ _occasion_links_html() {
 # the RENDERING SLOT it occupies) -- not applied to extra slots (see
 # EXTRA_SLOTS_FILE above), since a supplementary linked file doesn't
 # generally carry its own separate reading list.
+#
+# OCCURRENCES_FILE's own 9th column, CONFLICT_HOLIDAY (schedule-lib.sh's
+# week_occurrences), overrides the holiday-cancellation rendering above
+# when non-empty for a row -- a collision the maintainer has already
+# reviewed and deliberately decided to hold anyway (session-kinds.conf's
+# HOLIDAY_CONFLICT_WEEKS field) renders normally (title + links, exactly
+# as an uncancelled occurrence) with a "⚠️ " title prefix instead of
+# "No <label> (...)", and does NOT set any_cancelled -- so, unlike a real
+# cancellation, an extra slot sharing this week+kind still renders too.
 render_kind_cell_html() {
     local week="$1" kind_id="$2" occurrences_file="$3" titles_file="$4"
     local allowlist_file="$5" labels_file="$6" base_url="$7"
@@ -255,9 +264,27 @@ render_kind_cell_html() {
 
     local cancelled_style="font-weight:600;color:${CAL_CANCELLED};"
     local primary_variants="" any_cancelled=0
-    while IFS='|' read -r rkind rlabel rslot rdate rweekday rsuffix rvariants rcancel_extra; do
+    while IFS='|' read -r rkind rlabel rslot rdate rweekday rsuffix rvariants rcancel_extra rconflict; do
         [ -z "$rkind" ] && continue
         primary_variants="$rvariants"
+        if [ -n "$rconflict" ]; then
+            local title released links extra_url=""
+            title="$(slot_title "$rslot" "$titles_file")"
+            title="$(compose_slot_title "$rslot" "$title")"
+            if [ -n "$graded_file" ] && is_graded_slot "$rslot" "$graded_file"; then
+                title="🔴 ${title}"
+            fi
+            if is_slot_released "$rslot" "$allowlist_file"; then released=1; else released=0; fi
+            [ -n "$extra_link_label" ] && extra_url="$(extra_link_for_slot "$rslot" "$extra_link_file")"
+            links="$(_html_variant_links "$rkind" "$rslot" "$rvariants" "$base_url" "$released" "$palette" "$extra_link_label" "$extra_url")"
+            cell_html="${cell_html}<div style=\"font-weight:600;\">⚠️ $(echo "$title" | _html_escape)</div><div style=\"margin-top:2px;font-size:0.85rem;\">${links}</div>"
+            if [ -n "$extra_note_file" ]; then
+                local extra_note
+                extra_note="$(extra_note_for_slot "$rslot" "$extra_note_file")"
+                [ -n "$extra_note" ] && cell_html="${cell_html}<div style=\"margin-top:2px;font-size:0.85rem;\">${extra_note}</div>"
+            fi
+            continue
+        fi
         local holiday_name
         holiday_name="$(occurrence_holiday "$rdate" "$rcancel_extra" "$holidays_file")" && {
             local emoji prefix=""

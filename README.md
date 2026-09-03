@@ -52,7 +52,7 @@ for every renderer-specific step.
   `KIND_ID`):
 
   ```
-  KIND_ID|LABEL|WEEKDAY|SUFFIX|SLOT_PATTERN|VARIANTS|WEEK_START|WEEK_END|EXCLUDE_WEEKS|DAY_LABEL|CANCEL_EXTRA_WEEKDAYS|AUTO_SHIFT_ON_HOLIDAY
+  KIND_ID|LABEL|WEEKDAY|SUFFIX|SLOT_PATTERN|VARIANTS|WEEK_START|WEEK_END|EXCLUDE_WEEKS|DAY_LABEL|CANCEL_EXTRA_WEEKDAYS|AUTO_SHIFT_ON_HOLIDAY|HOLIDAY_CONFLICT_WEEKS
   ```
 
   | Field | Meaning |
@@ -68,6 +68,7 @@ for every renderer-specific step.
   | `DAY_LABEL` | optional 10th field (omit entirely, or `-`): overrides the weekday name a split column's header shows for this one occurrence (see "Column splitting" below) — `WEEKDAY` still has to name one concrete day for the schedule engine's own date math, but a course whose real session isn't pinned to that exact day (e.g. "Session 1, some day Mon-Wed") can set `DAY_LABEL` to `Mon-Wed` so the header doesn't assert a precision that isn't real |
   | `CANCEL_EXTRA_WEEKDAYS` | optional 11th field (omit entirely, or `-`): comma-separated weekday names (e.g. `tue`) this same occurrence *also* spans, for a session held across more than one calendar day with the same material (e.g. a studio meeting Monday **and** Tuesday) — a holiday landing on *any* of these days, not just `WEEKDAY`'s own, still cancels the occurrence. Purely a cancellation check: these extra days don't get their own slot ID, column, or `{count}` — it's still exactly one row, one `SLOT_ID` |
   | `AUTO_SHIFT_ON_HOLIDAY` | optional 12th field (omit entirely, or `-`): when set, a holiday-colliding week (same multi-day check `CANCEL_EXTRA_WEEKDAYS` uses) isn't just cancelled for display — the occurrence is skipped entirely at placement time, so the content that would have landed there shifts to the next eligible week instead, cascading the same way an `EXCLUDE_WEEKS` week already does. Requires `{count}` in `SLOT_PATTERN` (a clear error otherwise) — shifting only makes sense for a flat, week-independent numbering; a week-derived slot ID like `L4A` names the week it's shown in by construction, so it isn't a candidate. See "Holiday-aware auto-shift" below |
+  | `HOLIDAY_CONFLICT_WEEKS` | optional 13th field (omit entirely, or `-`): comma-separated week numbers where a holiday collision is already known and deliberately accepted (e.g. the real course already runs a take-home activity that week) — the occurrence is held in place instead of shifted/cancelled. See "Conflict-in-place" below |
 
   This is what makes "2 lectures a week" vs. "1 lecture + 1 recitation +
   1 lab a week" — and a real course's irregular exceptions — expressible
@@ -125,6 +126,31 @@ for every renderer-specific step.
   the number, since it has no way to know how much content a course has
   authored — that's course-specific: a directory of files, a content
   map, whatever).
+
+  **Conflict-in-place**: `HOLIDAY_CONFLICT_WEEKS` is a third, milder
+  outcome alongside "shift forward" and "hard error" — a maintainer-
+  curated list of specific weeks where a collision is already known and
+  deliberately accepted (e.g. the real course already runs a take-home
+  activity that week), so the occurrence should still be placed and
+  shown, not skipped or cancelled. Two independent effects, both keyed
+  off the same field: (1) for a row with `AUTO_SHIFT_ON_HOLIDAY` set, it
+  overrides that row's holiday-skip for a listed week, so the occurrence
+  consumes its `{count}` slot normally instead of shifting downstream
+  content forward; (2) for *any* row (`AUTO_SHIFT_ON_HOLIDAY` or not),
+  `week_occurrences`' output gains a 9th column, `CONFLICT_HOLIDAY` (the
+  colliding holiday's name, empty otherwise), which
+  `render_kind_cell`/`render_kind_cell_html` check *before* the usual
+  holiday-cancellation branch — when set, the occurrence renders
+  normally (title + links) with a `"⚠️ "` prefix instead of `"No <label>
+  (...)"`. A week listed here where nothing actually collides (config
+  drift, e.g. a holiday later moves) is a silent no-op. This resolved a
+  real case: epp2-toolkit-poc's studio schedule has zero slack (two
+  weekly rows contributing 9 and 8 eligible weeks respectively, exactly
+  matching 17 real studios), so a holiday landing on either session
+  collides with *both* real meeting windows the same week — the course
+  already runs a single take-home activity there, and
+  `HOLIDAY_CONFLICT_WEEKS` lets the schedule reflect that directly
+  instead of cascading everything after it and running out of room.
 - **A content-to-slot map** — `SLOT_ID|SOURCE_PATH` pairs, so the build
   knows which file backs each scheduled slot. No fixed naming
   convention is assumed — lay content out however suits the course.

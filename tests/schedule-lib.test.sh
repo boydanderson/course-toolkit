@@ -83,7 +83,7 @@ studio|B|Thu-Fri (Studio B)" "$out"
     } > "$dlx_conf"
     out="$(week_occurrences "$dlx_conf" 2026-08-10 3)"
     assert_eq "DAY_LABEL doesn't break EXCLUDE_WEEKS: week 3's mon row is excluded, only thu's Studio5 remains" \
-        "studio|Studio|Studio5|2026-08-13|thu|B|instructor,student|" "$out"
+        "studio|Studio|Studio5|2026-08-13|thu|B|instructor,student||" "$out"
     out="$(week_occurrences "$dlx_conf" 2026-08-10 4 | head -1 | cut -d'|' -f3)"
     assert_eq "DAY_LABEL doesn't break {count}: week 4 mon is Studio6, no gap/shift from the exclusion" \
         "Studio6" "$out"
@@ -285,6 +285,106 @@ studio|B|Thu-Fri (Studio B)" "$out"
     rm -f "$ash_multirow_conf"
 
     rm -f "$ash_conf" "$ash_holidays"
+
+    # HOLIDAY_CONFLICT_WEEKS (13th field): a week listed here overrides
+    # AUTO_SHIFT_ON_HOLIDAY's skip -- the occurrence is held in place
+    # (not shifted), and week_occurrences' new 9th output column,
+    # CONFLICT_HOLIDAY, carries the colliding holiday's name so a
+    # renderer can flag it instead of cancelling it.
+    local hcw_conf hcw_holidays
+    hcw_conf="$(mktemp)"
+    hcw_holidays="$(mktemp)"
+    printf 'studio|Studio|mon|-|S{count}|view,print|1|3|-|-|-|1|2\n' > "$hcw_conf"
+    printf '2026-08-17|Test Holiday\n' > "$hcw_holidays"
+    out="$(week_occurrences "$hcw_conf" 2026-08-10 1 "$hcw_holidays" 2026-08-10 0)"
+    assert_contains "HOLIDAY_CONFLICT_WEEKS: week 1 (clean) still produces S1" "$out" "S1|"
+    out="$(week_occurrences "$hcw_conf" 2026-08-17 2 "$hcw_holidays" 2026-08-10 0)"
+    assert_contains "HOLIDAY_CONFLICT_WEEKS: week 2 (listed + colliding) still produces S2, not skipped" \
+        "$out" "S2|"
+    assert_eq "HOLIDAY_CONFLICT_WEEKS: week 2's CONFLICT_HOLIDAY column names the holiday" \
+        "Test Holiday" "$(echo "$out" | cut -d'|' -f9)"
+    out="$(week_occurrences "$hcw_conf" 2026-08-24 3 "$hcw_holidays" 2026-08-10 0)"
+    assert_contains "HOLIDAY_CONFLICT_WEEKS: week 3 is S3, nothing shifted/cascaded" "$out" "S3|"
+    assert_eq "HOLIDAY_CONFLICT_WEEKS: week 3's CONFLICT_HOLIDAY column is empty (not a listed week)" \
+        "" "$(echo "$out" | cut -d'|' -f9)"
+
+    # A week listed in HOLIDAY_CONFLICT_WEEKS where nothing actually
+    # collides (config drift, e.g. a holiday later moves) is a silent
+    # no-op: normal occurrence, empty CONFLICT_HOLIDAY, no special
+    # rendering triggered. Uses its own holidays file with no entries
+    # anywhere near this row's 3 weeks -- reusing $hcw_holidays (which
+    # DOES collide with this same row shape at week 2) would confound
+    # this specific "listed but nothing collides" case with an unrelated
+    # real collision elsewhere in the same 3-week scan.
+    local hcw_noop_conf hcw_noop_holidays
+    hcw_noop_conf="$(mktemp)"
+    hcw_noop_holidays="$(mktemp)"
+    printf 'studio|Studio|mon|-|S{count}|view,print|1|3|-|-|-|1|3\n' > "$hcw_noop_conf"
+    printf '2099-01-01|Irrelevant Holiday\n' > "$hcw_noop_holidays"
+    out="$(week_occurrences "$hcw_noop_conf" 2026-08-24 3 "$hcw_noop_holidays" 2026-08-10 0)"
+    assert_contains "HOLIDAY_CONFLICT_WEEKS: listed week with no real collision still produces S3" \
+        "$out" "S3|"
+    assert_eq "HOLIDAY_CONFLICT_WEEKS: listed week with no real collision has empty CONFLICT_HOLIDAY" \
+        "" "$(echo "$out" | cut -d'|' -f9)"
+    rm -f "$hcw_noop_conf" "$hcw_noop_holidays"
+
+    # The collision may come from CANCEL_EXTRA_WEEKDAYS (the extra day,
+    # not the row's own primary WEEKDAY) -- CONFLICT_HOLIDAY still picks
+    # it up via the same cancel_extra_dates lookup.
+    local hcw_extra_conf hcw_extra_holidays
+    hcw_extra_conf="$(mktemp)"
+    hcw_extra_holidays="$(mktemp)"
+    printf 'studio|Studio|mon|-|S{count}|view,print|1|3|-|-|tue|1|2\n' > "$hcw_extra_conf"
+    printf '2026-08-18|Extra-Day Holiday\n' > "$hcw_extra_holidays"
+    out="$(week_occurrences "$hcw_extra_conf" 2026-08-17 2 "$hcw_extra_holidays" 2026-08-10 0)"
+    assert_contains "HOLIDAY_CONFLICT_WEEKS: extra-day collision, week 2 still produces S2" "$out" "S2|"
+    assert_eq "HOLIDAY_CONFLICT_WEEKS: extra-day collision, CONFLICT_HOLIDAY names it" \
+        "Extra-Day Holiday" "$(echo "$out" | cut -d'|' -f9)"
+    rm -f "$hcw_extra_conf" "$hcw_extra_holidays"
+
+    # HOLIDAY_CONFLICT_WEEKS works on a plain {n}-kind too, with NO
+    # AUTO_SHIFT_ON_HOLIDAY set -- the display effect (CONFLICT_HOLIDAY
+    # populated) is independent of the placement-skip override, since a
+    # non-AUTO_SHIFT row was never going to be skipped/shifted anyway.
+    local hcw_plain_conf hcw_plain_holidays
+    hcw_plain_conf="$(mktemp)"
+    hcw_plain_holidays="$(mktemp)"
+    printf 'lecture|Lecture|wed|A|L{n}{suffix}|view,print|1|3|-|-|-|-|2\n' > "$hcw_plain_conf"
+    out="$(week_occurrences "$hcw_plain_conf" 2026-08-17 2 "$hcw_plain_holidays" '' '')"
+    assert_contains "HOLIDAY_CONFLICT_WEEKS on a plain {n} kind still produces the occurrence" \
+        "$out" "L2A|"
+    printf '2026-08-19|Wednesday Holiday\n' > "$hcw_plain_holidays"
+    out="$(week_occurrences "$hcw_plain_conf" 2026-08-17 2 "$hcw_plain_holidays" '' '')"
+    assert_eq "HOLIDAY_CONFLICT_WEEKS on a plain {n} kind: CONFLICT_HOLIDAY still populated" \
+        "Wednesday Holiday" "$(echo "$out" | cut -d'|' -f9)"
+    rm -f "$hcw_plain_conf" "$hcw_plain_holidays"
+
+    # occurrence_count/available_slot_count: HOLIDAY_CONFLICT_WEEKS
+    # restores the count a plain AUTO_SHIFT_ON_HOLIDAY skip would have
+    # dropped -- the real epp2-toolkit-poc fix (a schedule with zero
+    # slack: a known, accepted collision shouldn't cost a slot at all).
+    assert_eq "available_slot_count: HOLIDAY_CONFLICT_WEEKS restores the week AUTO_SHIFT would drop" \
+        "3" "$(available_slot_count "$hcw_conf" studio 3 "$hcw_holidays" 2026-08-10 0)"
+
+    # Real regression, epp2-toolkit-poc's actual shape: two rows sharing
+    # one merged {count} sequence, a holiday colliding with row 1's own
+    # week 2, HOLIDAY_CONFLICT_WEEKS=2 on row 1 overriding it -- confirms
+    # the merged total is the FULL 6 (3 weeks x 2 rows, no skips at all),
+    # not the 5 an un-overridden collision would produce (see the
+    # earlier "available_slot_count: merged total across two rows" case
+    # above, same 2-row shape with no HOLIDAY_CONFLICT_WEEKS) -- matching
+    # the real "known, accepted collision shouldn't cost a slot" fix.
+    local hcw_multirow_conf
+    hcw_multirow_conf="$(mktemp)"
+    {
+        printf 'studio|Studio|mon|A|Studio{count}|instructor,student|1|3|-|-|-|1|2\n'
+        printf 'studio|Studio|thu|B|Studio{count}|instructor,student|1|3|-\n'
+    } > "$hcw_multirow_conf"
+    assert_eq "available_slot_count: HOLIDAY_CONFLICT_WEEKS on one row of a merged multi-row kind" \
+        "6" "$(available_slot_count "$hcw_multirow_conf" studio 3 "$hcw_holidays" 2026-08-10 0)"
+    rm -f "$hcw_multirow_conf"
+
+    rm -f "$hcw_conf" "$hcw_holidays"
 
     # {count}: flat sequential numbering across occurrences, not
     # week-derived -- e.g. 2 labs/week (mon/A, thu/B) numbered Lab1..LabN

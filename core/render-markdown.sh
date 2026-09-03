@@ -214,7 +214,14 @@ _md_group_add() {
 # <holiday> (No <label>)" instead -- default unset preserves today's
 # exact phrase order for every existing consumer. Either way this
 # overrides even an authored/released slot, since the session didn't
-# happen regardless of whether content exists for it. EXTRA_LINK_LABEL/
+# happen regardless of whether content exists for it. This cancellation
+# rendering is itself overridden when OCCURRENCES_FILE's own 9th column,
+# CONFLICT_HOLIDAY (schedule-lib.sh's week_occurrences), is non-empty for
+# a row -- a holiday collision the maintainer has already reviewed and
+# deliberately decided to hold anyway (session-kinds.conf's
+# HOLIDAY_CONFLICT_WEEKS field) renders normally (title + links, exactly
+# as an uncancelled occurrence) with a "⚠️ " prefix instead, rather than
+# "No <label> (...)". EXTRA_LINK_LABEL/
 # _FILE (both optional -- e.g. "Recording"/a SLOT_ID|URL file) add a
 # second, independently-gated link to every occurrence -- see
 # _md_variant_links' own comment. SOURCE_LINKS_FILE (optional, SLOT_ID|
@@ -318,8 +325,16 @@ render_kind_cell() {
     if [ ${#extra_slot_ids[@]} -eq 0 ]; then
         # No extra slots for this week+kind -- today's exact behavior,
         # completely unchanged.
-        while IFS='|' read -r rkind rlabel rslot rdate rweekday rsuffix rvariants rcancel_extra; do
+        while IFS='|' read -r rkind rlabel rslot rdate rweekday rsuffix rvariants rcancel_extra rconflict; do
             [ -z "$rkind" ] && continue
+            if [ -n "$rconflict" ]; then
+                local tl title links
+                tl="$(_row_title_and_links "$rkind" "$rslot" "$rvariants" "$titles_file" "$allowlist_file" "$base_url" "$extra_link_label" "$extra_link_file" "$graded_file" "$source_links_file")"
+                title="${tl%%|*}"
+                links="${tl#*|}"
+                cell_parts+=("⚠️ ${title} (${links})")
+                continue
+            fi
             local holiday_name
             holiday_name="$(occurrence_holiday "$rdate" "$rcancel_extra" "$holidays_file")" && {
                 local emoji prefix=""
@@ -344,9 +359,17 @@ render_kind_cell() {
         # via _md_group_add instead of always adding a separate entry.
         _MD_GROUP_TITLE=() _MD_GROUP_ENTRY=() _MD_GROUP_SLOT=() _MD_GROUP_COUNT=()
         local primary_variants=""
-        while IFS='|' read -r rkind rlabel rslot rdate rweekday rsuffix rvariants rcancel_extra; do
+        while IFS='|' read -r rkind rlabel rslot rdate rweekday rsuffix rvariants rcancel_extra rconflict; do
             [ -z "$rkind" ] && continue
             primary_variants="$rvariants"
+            if [ -n "$rconflict" ]; then
+                local tl title links
+                tl="$(_row_title_and_links "$rkind" "$rslot" "$rvariants" "$titles_file" "$allowlist_file" "$base_url" "$extra_link_label" "$extra_link_file" "$graded_file" "$source_links_file")"
+                title="${tl%%|*}"
+                links="${tl#*|}"
+                cell_parts+=("⚠️ ${title} (${links})")
+                continue
+            fi
             local holiday_name
             holiday_name="$(occurrence_holiday "$rdate" "$rcancel_extra" "$holidays_file")" && {
                 local emoji prefix=""
