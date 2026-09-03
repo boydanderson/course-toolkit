@@ -217,7 +217,7 @@ _walk_semester() {
                     echo "built ${slot_id} (${variant_key}) -> ${out_pdf}" >&2
                 fi
             done
-        done < <(week_occurrences "$SESSION_KINDS" "$monday" "$teaching_week")
+        done < <(week_occurrences "$SESSION_KINDS" "$monday" "$teaching_week" "$HOLIDAYS" "$SEMESTER_START_MONDAY" "$RECESS_AFTER_WEEK")
     done < <(semester_weeks "$SEMESTER_START_MONDAY" "$NUM_WEEKS" "$RECESS_AFTER_WEEK")
 }
 

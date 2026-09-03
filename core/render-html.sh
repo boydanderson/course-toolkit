@@ -419,7 +419,7 @@ render_html_calendar() {
 
         echo '<tr>'
         printf '<td style="%s">%s</td>' "$week_style" "$teaching_week"
-        week_occurrences "$kinds_conf" "$monday" "$teaching_week" > "$occ_file"
+        week_occurrences "$kinds_conf" "$monday" "$teaching_week" "$holidays_file" "$start_monday" "$recess_after" > "$occ_file"
         for ((i = 0; i < ${#col_kind[@]}; i++)); do
             local k="${col_kind[$i]}" s="${col_suffix[$i]}"
             local cell extra_label=""

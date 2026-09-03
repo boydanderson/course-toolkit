@@ -10,7 +10,12 @@ ENRICH_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # _capitalize now lives in schedule-lib.sh (schedule-lib.sh's own
 # kind_columns needs it too, and shouldn't depend on this file to get
 # it) -- sourced here so every existing caller of enrich-lib.sh keeps
-# getting it from here as well, unchanged.
+# getting it from here as well, unchanged. is_holiday now lives in
+# date-lib.sh (schedule-lib.sh's own occurrence_count/week_occurrences
+# need it too, for holiday-aware AUTO_SHIFT_ON_HOLIDAY placement, and
+# schedule-lib.sh can't depend on this file without a cycle) -- sourced
+# here transitively via schedule-lib.sh, so every existing caller of
+# enrich-lib.sh keeps getting it from here as well, unchanged.
 source "$ENRICH_LIB_DIR/schedule-lib.sh"
 
 # is_slot_released SLOT_ID ALLOWLIST_FILE -> success (0) if SLOT_ID is
@@ -106,19 +111,6 @@ week_note() {
         out="${out}; ${lines[$i]}"
     done
     echo "$out"
-}
-
-# is_holiday DATE HOLIDAYS_FILE -> the holiday's name (success/0) if
-# DATE is listed, empty + failure (1) otherwise. Format: DATE|NAME
-# (YYYY-MM-DD), one per line -- a course supplies this itself (fetching
-# a real institution's public-holiday calendar is out of scope for a
-# generic toolkit; it's just data here).
-is_holiday() {
-    local date="$1" holidays_file="$2" name
-    [ -f "$holidays_file" ] || return 1
-    name=$(grep -vE '^\s*#|^\s*$' "$holidays_file" | grep "^${date}|" | head -1 | cut -d'|' -f2- || true)
-    [ -z "$name" ] && return 1
-    echo "$name"
 }
 
 # occurrence_holiday DATE EXTRA_DATES HOLIDAYS_FILE -> the first holiday

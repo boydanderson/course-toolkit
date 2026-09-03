@@ -87,12 +87,31 @@
 #                 extra days don't get their own slot ID, column, or
 #                 count -- the occurrence is still exactly one row, one
 #                 SLOT_ID, same as a course that never sets this field.
+#   AUTO_SHIFT_ON_HOLIDAY optional 12th field (omit entirely, or "-"):
+#                 when set, a week whose occurrence collides with a real
+#                 holiday (same multi-day check CANCEL_EXTRA_WEEKDAYS
+#                 uses) isn't just cancelled for display -- it's skipped
+#                 entirely at placement time, so the content that would
+#                 have landed there shifts to the next eligible week
+#                 instead (see week_occurrences' own comment for the
+#                 full mechanism). Requires {count} in SLOT_PATTERN
+#                 (rejected with a clear error otherwise) -- shifting
+#                 only makes sense for a kind whose slot ID is a flat
+#                 running sequence, not tied to a specific calendar
+#                 week (e.g. epp2-toolkit-poc's Studio{count}); a
+#                 week-derived slot ID like L4A names the week it's
+#                 shown in by construction, so it isn't a candidate.
 #
 # Comment lines (leading #) and blank lines are ignored, same convention
 # as every other .conf file in this ecosystem.
 
 SCHEDULE_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCHEDULE_LIB_DIR/date-lib.sh"
+# semester_weeks -- occurrence_count's AUTO_SHIFT_ON_HOLIDAY re-scan needs
+# to know each intermediate teaching week's real calendar Monday
+# (recess-gap aware), not just the target week's -- semester-lib.sh owns
+# that mapping and doesn't depend on this file, so no cycle.
+source "$SCHEDULE_LIB_DIR/semester-lib.sh"
 
 # weekday_offset NAME -> 0-6 (Monday=0 .. Sunday=6), or empty + nonzero
 # exit if NAME isn't recognized. NAME is case-insensitive.
@@ -137,26 +156,79 @@ format_slot_id() {
     echo "$pattern"
 }
 
+# _row_holiday_shift_skip WEEK_MONDAY WEEKDAY CANCEL_EXTRA_WEEKDAYS
+# HOLIDAYS_FILE -> success (0) if this occurrence's primary date OR any
+# CANCEL_EXTRA_WEEKDAYS date hits a HOLIDAYS_FILE entry, failure (1)
+# otherwise. Shared by occurrence_count/week_occurrences for
+# AUTO_SHIFT_ON_HOLIDAY -- deliberately separate from enrich-lib.sh's
+# occurrence_holiday (same underlying check, different shape: that one
+# returns the holiday's NAME for display, this one only needs a
+# boolean for scheduling/placement -- and schedule-lib.sh can't depend
+# on enrich-lib.sh without a cycle, enrich-lib.sh depends on this file).
+_row_holiday_shift_skip() {
+    local week_monday="$1" weekday="$2" cancel_extra_weekdays="$3" holidays_file="$4"
+    local date
+    date="$(occurrence_date "$week_monday" "$weekday")" || return 1
+    is_holiday "$date" "$holidays_file" > /dev/null 2>&1 && return 0
+    if [ -z "$cancel_extra_weekdays" ] || [ "$cancel_extra_weekdays" = "-" ]; then
+        return 1
+    fi
+    local extra_wd extra_date found=1
+    local IFS_SAVE="$IFS"
+    IFS=','
+    for extra_wd in $cancel_extra_weekdays; do
+        IFS="$IFS_SAVE"
+        extra_date="$(occurrence_date "$week_monday" "$extra_wd")" || continue
+        if is_holiday "$extra_date" "$holidays_file" > /dev/null 2>&1; then
+            found=0
+            break
+        fi
+    done
+    IFS="$IFS_SAVE"
+    return "$found"
+}
+
 # occurrence_count CONF_FILE KIND_ID TARGET_WEEK TARGET_WEEKDAY
-# TARGET_SUFFIX -> the 1-based flat count of the (TARGET_WEEK,
-# TARGET_WEEKDAY, TARGET_SUFFIX) occurrence of KIND_ID among all of that
-# kind's active occurrences from week 1 through TARGET_WEEK, counted in
-# (week, file-row-order) sequence merged across every row sharing
-# KIND_ID. Re-scans from week 1 on every call rather than keeping running
-# state across calls -- deliberately, since bash 3.2 (macOS's shipped
-# /bin/bash) has no associative arrays to hold per-kind counters, and a
-# semester has few enough weeks/rows that re-scanning is negligible.
+# TARGET_SUFFIX [HOLIDAYS_FILE] [START_MONDAY] [RECESS_AFTER_WEEK] -> the
+# 1-based flat count of the (TARGET_WEEK, TARGET_WEEKDAY, TARGET_SUFFIX)
+# occurrence of KIND_ID among all of that kind's active occurrences from
+# week 1 through TARGET_WEEK, counted in (week, file-row-order) sequence
+# merged across every row sharing KIND_ID. Re-scans from week 1 on every
+# call rather than keeping running state across calls -- deliberately,
+# since bash 3.2 (macOS's shipped /bin/bash) has no associative arrays to
+# hold per-kind counters, and a semester has few enough weeks/rows that
+# re-scanning is negligible.
+#
+# HOLIDAYS_FILE/START_MONDAY/RECESS_AFTER_WEEK (all optional, needed
+# together) make a row with AUTO_SHIFT_ON_HOLIDAY (12th field) set skip a
+# holiday-colliding week the exact same way an EXCLUDE_WEEKS week already
+# skips -- no count consumed, so the next eligible week absorbs that
+# occurrence instead. Needs START_MONDAY/RECESS_AFTER_WEEK (not just
+# TARGET_WEEK's own Monday, which this function is never given anyway)
+# because it has to independently derive *every* intermediate week's real
+# calendar Monday to check -- semester_weeks (semester-lib.sh) is the
+# single source of truth for that, recess-gap included. A row without
+# AUTO_SHIFT_ON_HOLIDAY set, or a caller that omits these three params
+# entirely, behaves exactly as before this existed.
 occurrence_count() {
     local conf_file="$1" kind_id="$2" target_week="$3" target_weekday="$4" target_suffix="$5"
-    local k l w s sp v ws we ew dl cew week count=0
+    local holidays_file="${6:-}" start_monday="${7:-}" recess_after_week="${8:-}"
+    local k l w s sp v ws we ew dl cew ashw week count=0
     for ((week = 1; week <= target_week; week++)); do
-        while IFS='|' read -r k l w s sp v ws we ew dl cew; do
+        while IFS='|' read -r k l w s sp v ws we ew dl cew ashw; do
             [ -z "$k" ] && continue
             case "$k" in \#*) continue ;; esac
             [ "$k" = "$kind_id" ] || continue
             if [ "$week" -lt "$ws" ] || [ "$week" -gt "$we" ]; then continue; fi
             if [ -n "$ew" ] && [ "$ew" != "-" ]; then
                 case ",${ew}," in *",${week},"*) continue ;; esac
+            fi
+            if [ -n "$ashw" ] && [ "$ashw" != "-" ] && [ -n "$holidays_file" ] && [ -n "$start_monday" ]; then
+                local this_week_monday
+                this_week_monday="$(semester_weeks "$start_monday" "$week" "$recess_after_week" | tail -1 | cut -d'|' -f2)"
+                if _row_holiday_shift_skip "$this_week_monday" "$w" "$cew" "$holidays_file"; then
+                    continue
+                fi
             fi
             count=$((count + 1))
             if [ "$week" -eq "$target_week" ] && [ "$w" = "$target_weekday" ] && [ "$s" = "$target_suffix" ]; then
@@ -168,10 +240,28 @@ occurrence_count() {
     echo "$count"
 }
 
-# week_occurrences CONF_FILE WEEK_MONDAY TEACHING_WEEK -> one line per
-# active occurrence for that teaching week, in CONF_FILE's own row order:
+# week_occurrences CONF_FILE WEEK_MONDAY TEACHING_WEEK [HOLIDAYS_FILE]
+# [START_MONDAY] [RECESS_AFTER_WEEK] -> one line per active occurrence
+# for that teaching week, in CONF_FILE's own row order:
 #
 #   KIND_ID|LABEL|SLOT_ID|DATE|WEEKDAY|SUFFIX|VARIANTS|CANCEL_EXTRA_DATES
+#
+# HOLIDAYS_FILE/START_MONDAY/RECESS_AFTER_WEEK (all optional, needed
+# together) enable a row's optional 12th field, AUTO_SHIFT_ON_HOLIDAY
+# (omit, or "-", for no effect): when set, a week whose occurrence would
+# land on a HOLIDAYS_FILE date (checking WEEKDAY's own date and any
+# CANCEL_EXTRA_WEEKDAYS dates, same multi-day check as cancellation
+# display) produces NO occurrence at all this week -- not "cancelled",
+# genuinely not placed here -- and (since AUTO_SHIFT_ON_HOLIDAY requires
+# {count} in SLOT_PATTERN, enforced with a clear error otherwise) doesn't
+# consume a count either, so the content that would have landed here
+# shifts to the next eligible week instead, cascading exactly like an
+# EXCLUDE_WEEKS week already does. START_MONDAY/RECESS_AFTER_WEEK are
+# needed (not just this call's own WEEK_MONDAY) because occurrence_count's
+# own re-scan has to independently derive every intermediate week's real
+# calendar Monday to check, via semester_weeks. A row without
+# AUTO_SHIFT_ON_HOLIDAY set, or a caller that omits these three params,
+# behaves exactly as before this existed.
 #
 # CANCEL_EXTRA_DATES (comma-separated YYYY-MM-DD, empty if the row's
 # optional 11th field CANCEL_EXTRA_WEEKDAYS was omitted/"-") is the real
@@ -201,11 +291,21 @@ occurrence_count() {
 # produce their own line, distinguished by SUFFIX/SLOT_ID.
 week_occurrences() {
     local conf_file="$1" week_monday="$2" teaching_week="$3"
-    local line kind_id label weekday suffix slot_pattern variants week_start week_end exclude_weeks day_label cancel_extra_weekdays
+    local holidays_file="${4:-}" start_monday="${5:-}" recess_after_week="${6:-}"
+    local line kind_id label weekday suffix slot_pattern variants week_start week_end exclude_weeks day_label cancel_extra_weekdays auto_shift_on_holiday
     local date slot_id count cancel_extra_dates
-    while IFS='|' read -r kind_id label weekday suffix slot_pattern variants week_start week_end exclude_weeks day_label cancel_extra_weekdays; do
+    while IFS='|' read -r kind_id label weekday suffix slot_pattern variants week_start week_end exclude_weeks day_label cancel_extra_weekdays auto_shift_on_holiday; do
         [ -z "$kind_id" ] && continue
         case "$kind_id" in \#*) continue ;; esac
+        if [ -n "$auto_shift_on_holiday" ] && [ "$auto_shift_on_holiday" != "-" ]; then
+            case "$slot_pattern" in
+                *'{count}'*) : ;;
+                *)
+                    echo "week_occurrences: AUTO_SHIFT_ON_HOLIDAY requires {count} in SLOT_PATTERN for kind '$kind_id'" >&2
+                    return 1
+                    ;;
+            esac
+        fi
         if [ "$teaching_week" -lt "$week_start" ] || [ "$teaching_week" -gt "$week_end" ]; then
             continue
         fi
@@ -214,13 +314,16 @@ week_occurrences() {
                 *",${teaching_week},"*) continue ;;
             esac
         fi
+        if [ -n "$auto_shift_on_holiday" ] && [ "$auto_shift_on_holiday" != "-" ] && [ -n "$holidays_file" ]; then
+            _row_holiday_shift_skip "$week_monday" "$weekday" "$cancel_extra_weekdays" "$holidays_file" && continue
+        fi
         date="$(occurrence_date "$week_monday" "$weekday")" || {
             echo "week_occurrences: bad weekday '$weekday' for kind '$kind_id'" >&2
             return 1
         }
         count=""
         case "$slot_pattern" in
-            *'{count}'*) count="$(occurrence_count "$conf_file" "$kind_id" "$teaching_week" "$weekday" "$suffix")" ;;
+            *'{count}'*) count="$(occurrence_count "$conf_file" "$kind_id" "$teaching_week" "$weekday" "$suffix" "$holidays_file" "$start_monday" "$recess_after_week")" ;;
         esac
         slot_id="$(format_slot_id "$slot_pattern" "$teaching_week" "$suffix" "$count")"
         cancel_extra_dates=""
@@ -241,6 +344,51 @@ week_occurrences() {
         printf '%s|%s|%s|%s|%s|%s|%s|%s\n' \
             "$kind_id" "$label" "$slot_id" "$date" "$weekday" "$suffix" "$variants" "$cancel_extra_dates"
     done < <(grep -vE '^\s*#|^\s*$' "$conf_file")
+}
+
+# available_slot_count CONF_FILE KIND_ID WEEKDAY SUFFIX [HOLIDAYS_FILE]
+# [START_MONDAY] [RECESS_AFTER_WEEK] -> how many eligible weeks exist for
+# the one row matching (KIND_ID, WEEKDAY, SUFFIX), within its own
+# WEEK_START..WEEK_END range -- "eligible" meaning the same rule
+# occurrence_count/week_occurrences already use: not in EXCLUDE_WEEKS,
+# and (only if that row's AUTO_SHIFT_ON_HOLIDAY is set, and
+# HOLIDAYS_FILE/START_MONDAY are given) not holiday-colliding either. 0
+# if no matching row exists.
+#
+# Schedule-lib.sh only knows how many *weeks* are available -- it has no
+# idea how much real content a course has authored for a kind (that
+# lives in course-specific places: a directory of source files, a
+# content-map, whatever). This function exists so a course's own build
+# step can compare its own real content count against the number this
+# returns and hard-fail with a clear message if content doesn't fit --
+# this function only ever reports the slot count, never does that
+# comparison or raises that error itself.
+#
+# Implemented as a thin wrapper around occurrence_count: calling it with
+# TARGET_WEEK = the row's own WEEK_END and asking for a
+# (week, weekday, suffix) triple that's never going to exactly match
+# WEEK_END's own row (a real occurrence at week=WEEK_END would only
+# "return early" from occurrence_count if it happens to still be
+# eligible there) relies on occurrence_count's own fallback: if the
+# early-return match never fires, it still returns the accumulated
+# total count of every eligible week from 1 through TARGET_WEEK once its
+# scan completes -- exactly "how many eligible slots exist for this row
+# through its own WEEK_END," regardless of whether WEEK_END itself
+# happens to be excluded or holiday-colliding.
+available_slot_count() {
+    local conf_file="$1" kind_id="$2" weekday="$3" suffix="$4"
+    local holidays_file="${5:-}" start_monday="${6:-}" recess_after_week="${7:-}"
+    local k l w s sp v ws we ew dl cew ashw
+    while IFS='|' read -r k l w s sp v ws we ew dl cew ashw; do
+        [ -z "$k" ] && continue
+        case "$k" in \#*) continue ;; esac
+        if [ "$k" = "$kind_id" ] && [ "$w" = "$weekday" ] && [ "$s" = "$suffix" ]; then
+            occurrence_count "$conf_file" "$kind_id" "$we" "$weekday" "$suffix" \
+                "$holidays_file" "$start_monday" "$recess_after_week"
+            return 0
+        fi
+    done < <(grep -vE '^\s*#|^\s*$' "$conf_file")
+    echo 0
 }
 
 # weekday_full_name NAME -> "Monday".."Sunday", or empty + nonzero exit
@@ -271,9 +419,9 @@ weekday_full_name() {
 # field, empty if that row didn't set one.
 kind_suffixes() {
     local conf_file="$1" kind_id="$2"
-    local k l w s sp v ws we ew dl cew
+    local k l w s sp v ws we ew dl cew ashw
     local seen=""
-    while IFS='|' read -r k l w s sp v ws we ew dl cew; do
+    while IFS='|' read -r k l w s sp v ws we ew dl cew ashw; do
         [ -z "$k" ] && continue
         case "$k" in \#*) continue ;; esac
         [ "$k" = "$kind_id" ] || continue

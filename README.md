@@ -52,7 +52,7 @@ for every renderer-specific step.
   `KIND_ID`):
 
   ```
-  KIND_ID|LABEL|WEEKDAY|SUFFIX|SLOT_PATTERN|VARIANTS|WEEK_START|WEEK_END|EXCLUDE_WEEKS|DAY_LABEL|CANCEL_EXTRA_WEEKDAYS
+  KIND_ID|LABEL|WEEKDAY|SUFFIX|SLOT_PATTERN|VARIANTS|WEEK_START|WEEK_END|EXCLUDE_WEEKS|DAY_LABEL|CANCEL_EXTRA_WEEKDAYS|AUTO_SHIFT_ON_HOLIDAY
   ```
 
   | Field | Meaning |
@@ -67,6 +67,7 @@ for every renderer-specific step.
   | `EXCLUDE_WEEKS` | optional (omit, or `-`): comma-separated week numbers to skip within that range, e.g. `4,6,10,12` for assessment-displaced weeks |
   | `DAY_LABEL` | optional 10th field (omit entirely, or `-`): overrides the weekday name a split column's header shows for this one occurrence (see "Column splitting" below) — `WEEKDAY` still has to name one concrete day for the schedule engine's own date math, but a course whose real session isn't pinned to that exact day (e.g. "Session 1, some day Mon-Wed") can set `DAY_LABEL` to `Mon-Wed` so the header doesn't assert a precision that isn't real |
   | `CANCEL_EXTRA_WEEKDAYS` | optional 11th field (omit entirely, or `-`): comma-separated weekday names (e.g. `tue`) this same occurrence *also* spans, for a session held across more than one calendar day with the same material (e.g. a studio meeting Monday **and** Tuesday) — a holiday landing on *any* of these days, not just `WEEKDAY`'s own, still cancels the occurrence. Purely a cancellation check: these extra days don't get their own slot ID, column, or `{count}` — it's still exactly one row, one `SLOT_ID` |
+  | `AUTO_SHIFT_ON_HOLIDAY` | optional 12th field (omit entirely, or `-`): when set, a holiday-colliding week (same multi-day check `CANCEL_EXTRA_WEEKDAYS` uses) isn't just cancelled for display — the occurrence is skipped entirely at placement time, so the content that would have landed there shifts to the next eligible week instead, cascading the same way an `EXCLUDE_WEEKS` week already does. Requires `{count}` in `SLOT_PATTERN` (a clear error otherwise) — shifting only makes sense for a flat, week-independent numbering; a week-derived slot ID like `L4A` names the week it's shown in by construction, so it isn't a candidate. See "Holiday-aware auto-shift" below |
 
   This is what makes "2 lectures a week" vs. "1 lecture + 1 recitation +
   1 lab a week" — and a real course's irregular exceptions — expressible
@@ -88,6 +89,37 @@ for every renderer-specific step.
   column, a "🏖️ Recess Week - No classes (dates)" note) between that
   teaching week and the next — see `core/semester-lib.sh`'s
   `semester_recess_week`.
+
+  **Holiday-aware auto-shift**: every other holiday-cancellation feature
+  in this toolkit (`is_holiday`, `CANCEL_EXTRA_WEEKDAYS`, the Notes
+  column) is *reactive* — it detects a collision at render time and
+  shows a cancellation, but never changes what's actually scheduled.
+  `AUTO_SHIFT_ON_HOLIDAY` is different: it acts at *placement* time. A
+  row with it set treats a holiday-colliding week exactly like an
+  `EXCLUDE_WEEKS` week — no occurrence is produced there at all, and no
+  `{count}` is consumed, so the content that would have landed there
+  shifts to the next eligible week instead, cascading forward past
+  however many holiday weeks it takes. Pass `HOLIDAYS_FILE`/
+  `START_MONDAY`/`RECESS_AFTER_WEEK` into `week_occurrences` (all three
+  needed together) to activate it — `cli.sh`'s `readme`/`canvas`/`build`
+  commands already do this automatically for every course, so a course
+  only needs to set the config field itself. Because `{count}` is
+  required, this only applies to a kind whose slot ID is a flat,
+  week-independent sequence (e.g. `Studio{count}`) — a week-derived slot
+  ID like `L4A` names the week it's shown in by construction, so
+  shifting it would break that correspondence; `week_occurrences`
+  rejects `AUTO_SHIFT_ON_HOLIDAY` on a `{count}`-less `SLOT_PATTERN`
+  with a clear error rather than silently doing nothing.
+
+  If a kind has more real content than eligible weeks (several holidays
+  eating into a fixed-length term), that's a hard stop, not a silent
+  drop or a silently-extended term — `core/schedule-lib.sh`'s
+  `available_slot_count` reports how many eligible weeks a row actually
+  has; a course's own build step compares that against its real
+  authored-content count and errors out itself (the toolkit only reports
+  the number, since it has no way to know how much content a course has
+  authored — that's course-specific: a directory of files, a content
+  map, whatever).
 - **A content-to-slot map** — `SLOT_ID|SOURCE_PATH` pairs, so the build
   knows which file backs each scheduled slot. No fixed naming
   convention is assumed — lay content out however suits the course.

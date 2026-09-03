@@ -47,3 +47,21 @@ sgt_date() {
 day_of_week_name() {
     date -d "$1" '+%A' 2>/dev/null || date -j -f "%Y-%m-%d" "$1" '+%A' 2>/dev/null
 }
+
+# is_holiday DATE HOLIDAYS_FILE -> the holiday's name (success/0) if
+# DATE is listed, empty + failure (1) otherwise. Format: DATE|NAME
+# (YYYY-MM-DD), one per line -- a course supplies this itself (fetching
+# a real institution's public-holiday calendar is out of scope for a
+# generic toolkit; it's just data here). Lives here (not enrich-lib.sh,
+# where it used to live) since schedule-lib.sh needs it too, for
+# holiday-aware AUTO_SHIFT_ON_HOLIDAY placement -- enrich-lib.sh sources
+# schedule-lib.sh, not the other way around, so a pure date-lookup with
+# no rendering/course concept belongs at this lower level; every
+# existing caller still gets it transitively, unchanged.
+is_holiday() {
+    local date="$1" holidays_file="$2" name
+    [ -f "$holidays_file" ] || return 1
+    name=$(grep -vE '^\s*#|^\s*$' "$holidays_file" | grep "^${date}|" | head -1 | cut -d'|' -f2- || true)
+    [ -z "$name" ] && return 1
+    echo "$name"
+}

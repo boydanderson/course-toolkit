@@ -479,7 +479,7 @@ render_markdown_calendar() {
             echo "$recess_row"
         fi
 
-        week_occurrences "$kinds_conf" "$monday" "$teaching_week" > "$occ_file"
+        week_occurrences "$kinds_conf" "$monday" "$teaching_week" "$holidays_file" "$start_monday" "$recess_after" > "$occ_file"
         local row="| $teaching_week |"
         for ((i = 0; i < ${#col_kind[@]}; i++)); do
             local k="${col_kind[$i]}" s="${col_suffix[$i]}"

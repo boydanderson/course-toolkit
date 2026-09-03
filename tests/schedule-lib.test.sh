@@ -161,6 +161,109 @@ studio|B|Thu-Fri (Studio B)" "$out"
         "" "$out"
     rm -f "$cew_conf"
 
+    # AUTO_SHIFT_ON_HOLIDAY (12th field): a {count}-numbered kind skips a
+    # holiday-colliding week entirely at placement time -- the content
+    # that would have landed there shifts to the next eligible week,
+    # cascading the same way an EXCLUDE_WEEKS week already does.
+    local ash_conf ash_holidays
+    ash_conf="$(mktemp)"
+    ash_holidays="$(mktemp)"
+    printf 'studio|Studio|mon|-|S{count}|view,print|1|3|-|-|-|1\n' > "$ash_conf"
+    printf '2026-08-17|Test Holiday\n' > "$ash_holidays"
+    out="$(week_occurrences "$ash_conf" 2026-08-10 1 "$ash_holidays" 2026-08-10 0)"
+    assert_contains "AUTO_SHIFT_ON_HOLIDAY: week 1 (clean) still produces S1" "$out" "S1|"
+    out="$(week_occurrences "$ash_conf" 2026-08-17 2 "$ash_holidays" 2026-08-10 0)"
+    assert_eq "AUTO_SHIFT_ON_HOLIDAY: week 2 (holiday on its own Monday) produces nothing" \
+        "" "$out"
+    out="$(week_occurrences "$ash_conf" 2026-08-24 3 "$ash_holidays" 2026-08-10 0)"
+    assert_contains "AUTO_SHIFT_ON_HOLIDAY: week 3 absorbs the shifted content as S2, not S3" \
+        "$out" "S2|"
+
+    # Backward compat: a row WITHOUT AUTO_SHIFT_ON_HOLIDAY set is
+    # completely unaffected even when HOLIDAYS_FILE/START_MONDAY are
+    # passed in -- the field is per-row opt-in.
+    local noash_conf
+    noash_conf="$(mktemp)"
+    printf 'studio|Studio|mon|-|S{count}|view,print|1|3|-\n' > "$noash_conf"
+    out="$(week_occurrences "$noash_conf" 2026-08-17 2 "$ash_holidays" 2026-08-10 0)"
+    assert_contains "AUTO_SHIFT_ON_HOLIDAY unset: holiday week still produces the normal occurrence" \
+        "$out" "S2|"
+    rm -f "$noash_conf"
+
+    # The collision may also come from CANCEL_EXTRA_WEEKDAYS (the *extra*
+    # day, not the row's own primary WEEKDAY) -- still triggers a shift.
+    local ash_extra_conf ash_extra_holidays
+    ash_extra_conf="$(mktemp)"
+    ash_extra_holidays="$(mktemp)"
+    printf 'studio|Studio|mon|-|S{count}|view,print|1|3|-|-|tue|1\n' > "$ash_extra_conf"
+    printf '2026-08-18|Test Holiday\n' > "$ash_extra_holidays"
+    out="$(week_occurrences "$ash_extra_conf" 2026-08-17 2 "$ash_extra_holidays" 2026-08-10 0)"
+    assert_eq "AUTO_SHIFT_ON_HOLIDAY: a collision on the CANCEL_EXTRA_WEEKDAYS day also shifts" \
+        "" "$out"
+    out="$(week_occurrences "$ash_extra_conf" 2026-08-24 3 "$ash_extra_holidays" 2026-08-10 0)"
+    assert_contains "AUTO_SHIFT_ON_HOLIDAY: extra-day collision, week 3 absorbs it as S2" \
+        "$out" "S2|"
+    rm -f "$ash_extra_conf" "$ash_extra_holidays"
+
+    # Two consecutive holiday weeks: the shift cascades past both, not
+    # just the first.
+    local ash_double_holidays
+    ash_double_holidays="$(mktemp)"
+    printf '2026-08-17|Holiday A\n2026-08-24|Holiday B\n' > "$ash_double_holidays"
+    out="$(week_occurrences "$ash_conf" 2026-08-17 2 "$ash_double_holidays" 2026-08-10 0)"
+    assert_eq "AUTO_SHIFT_ON_HOLIDAY: two consecutive holidays, week 2 produces nothing" "" "$out"
+    out="$(week_occurrences "$ash_conf" 2026-08-24 3 "$ash_double_holidays" 2026-08-10 0)"
+    assert_eq "AUTO_SHIFT_ON_HOLIDAY: two consecutive holidays, week 3 ALSO produces nothing" "" "$out"
+    rm -f "$ash_double_holidays"
+
+    # Hard error: AUTO_SHIFT_ON_HOLIDAY set on a row whose SLOT_PATTERN
+    # has no {count} -- shifting only makes sense for a flat, week-
+    # independent numbering.
+    local ash_bad_conf
+    ash_bad_conf="$(mktemp)"
+    printf 'lecture|Lecture|wed|A|L{n}{suffix}|view,print|1|13|-|-|-|1\n' > "$ash_bad_conf"
+    assert_failure "AUTO_SHIFT_ON_HOLIDAY without {count} in SLOT_PATTERN is a hard error" \
+        week_occurrences "$ash_bad_conf" 2026-08-10 1 "$ash_holidays" 2026-08-10 0
+    out="$(week_occurrences "$ash_bad_conf" 2026-08-10 1 "$ash_holidays" 2026-08-10 0 2>&1 >/dev/null)"
+    assert_contains "AUTO_SHIFT_ON_HOLIDAY error message names the kind" "$out" "lecture"
+    rm -f "$ash_bad_conf"
+
+    # Recess interaction: occurrence_count's own multi-week re-scan must
+    # derive each intermediate week's real calendar Monday via
+    # semester_weeks (recess-gap aware), not naive +7-day arithmetic --
+    # a holiday landing in the calendar week right after a recess gap
+    # must still be found correctly.
+    local ash_recess_conf ash_recess_holidays
+    ash_recess_conf="$(mktemp)"
+    ash_recess_holidays="$(mktemp)"
+    printf 'studio|Studio|mon|-|S{count}|view,print|1|3|-|-|-|1\n' > "$ash_recess_conf"
+    # start_monday=2026-08-10 (week1), recess after week 1 -> week 2's
+    # real Monday is 2026-08-24 (one calendar week skipped), not
+    # 2026-08-17 (naive +7).
+    printf '2026-08-24|Recess-Adjacent Holiday\n' > "$ash_recess_holidays"
+    out="$(week_occurrences "$ash_recess_conf" 2026-08-24 2 "$ash_recess_holidays" 2026-08-10 1)"
+    assert_eq "AUTO_SHIFT_ON_HOLIDAY + recess: week 2's real (post-recess) Monday is checked" \
+        "" "$out"
+    out="$(week_occurrences "$ash_recess_conf" 2026-08-31 3 "$ash_recess_holidays" 2026-08-10 1)"
+    assert_contains "AUTO_SHIFT_ON_HOLIDAY + recess: week 3 absorbs the shifted content as S2" \
+        "$out" "S2|"
+    rm -f "$ash_recess_conf" "$ash_recess_holidays"
+
+    # available_slot_count: how many eligible weeks exist for a row,
+    # within its own WEEK_START..WEEK_END -- a course's own build step
+    # compares this against real authored content count and errors out
+    # itself if content doesn't fit; this function only reports the
+    # number. $ash_conf (studio|mon|-, WEEK_END=3, AUTO_SHIFT_ON_HOLIDAY)
+    # + $ash_holidays (holiday on week 2's Monday) are still in scope.
+    assert_eq "available_slot_count: 3-week row with 1 holiday-colliding week = 2 eligible" \
+        "2" "$(available_slot_count "$ash_conf" studio mon - "$ash_holidays" 2026-08-10 0)"
+    assert_eq "available_slot_count: no HOLIDAYS_FILE given, holiday never checked, all 3 eligible" \
+        "3" "$(available_slot_count "$ash_conf" studio mon - "" 2026-08-10 0)"
+    assert_eq "available_slot_count: no matching row for this KIND_ID/WEEKDAY/SUFFIX is 0" \
+        "0" "$(available_slot_count "$ash_conf" studio thu - "$ash_holidays" 2026-08-10 0)"
+
+    rm -f "$ash_conf" "$ash_holidays"
+
     # {count}: flat sequential numbering across occurrences, not
     # week-derived -- e.g. 2 labs/week (mon/A, thu/B) numbered Lab1..LabN
     # straight through, not Lab1A/Lab1B/Lab2A...
