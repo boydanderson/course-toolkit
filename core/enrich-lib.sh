@@ -196,6 +196,59 @@ week_holiday_notes() {
     echo "$out"
 }
 
+# week_special_date_notes MONDAY SPECIAL_DATES_FILE -> "📅 <Weekday>:
+# <Name>" for every day Mon-Sun of the calendar week starting MONDAY
+# that has a SPECIAL_DATES_FILE entry, semicolon-joined -- empty if
+# none. Same DATE|NAME shape and Mon-Sun scan as week_holiday_notes
+# (reuses is_holiday's own lookup against a different file), but for a
+# course's own non-holiday calendar markers (e.g. an institution's
+# academic-calendar entries) -- no emoji lookup, since this convention
+# never had one.
+week_special_date_notes() {
+    local monday="$1" special_dates_file="$2"
+    [ -f "$special_dates_file" ] || return 0
+    local lines=() i date dow name
+    for ((i = 0; i < 7; i++)); do
+        date="$(add_days "$monday" "$i")"
+        name="$(is_holiday "$date" "$special_dates_file")" || continue
+        dow="$(day_of_week_name "$date")"
+        lines+=("📅 ${dow}: ${name}")
+    done
+    [ ${#lines[@]} -eq 0 ] && return 0
+    local out="${lines[0]}" j
+    for ((j = 1; j < ${#lines[@]}; j++)); do
+        out="${out}; ${lines[$j]}"
+    done
+    echo "$out"
+}
+
+# week_key_event_notes MONDAY KEY_EVENTS_FILE -> "📌 <Weekday>: <Name>
+# (<START>-<END>)" for every day Mon-Sun of the calendar week starting
+# MONDAY that has a KEY_EVENTS_FILE entry, semicolon-joined -- empty if
+# none. Reads the same DATE|START_TIME|END_TIME|NAME shape render-
+# events.sh's Key Events table already uses (e.g. config/key-events.conf)
+# -- a course already populating that file for the one-off-events table
+# gets those events surfaced in the weekly Notes column too, at no extra
+# config cost.
+week_key_event_notes() {
+    local monday="$1" key_events_file="$2"
+    [ -f "$key_events_file" ] || return 0
+    local lines=() i date dow line estart eend ename
+    for ((i = 0; i < 7; i++)); do
+        date="$(add_days "$monday" "$i")"
+        line="$(grep -vE '^\s*#|^\s*$' "$key_events_file" | grep "^${date}|" | head -1)" || continue
+        dow="$(day_of_week_name "$date")"
+        IFS='|' read -r _ estart eend ename <<< "$line"
+        lines+=("📌 ${dow}: ${ename} (${estart}-${eend})")
+    done
+    [ ${#lines[@]} -eq 0 ] && return 0
+    local out="${lines[0]}" j
+    for ((j = 1; j < ${#lines[@]}; j++)); do
+        out="${out}; ${lines[$j]}"
+    done
+    echo "$out"
+}
+
 # kind_extra_slots WEEK KIND_ID EXTRA_SLOTS_FILE -> one SLOT_ID per line
 # (file order), for slots that share WEEK+KIND_ID with whatever
 # week_occurrences() already produced but aren't a distinct weekly

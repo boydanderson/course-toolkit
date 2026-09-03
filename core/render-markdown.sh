@@ -391,6 +391,16 @@ render_kind_cell() {
 # WEEK|KIND_ID|SLOT_ID) lists extra per-week slots for a kind, grouped by
 # matching title with whatever occurrence(s) that week+kind already has
 # -- see render_kind_cell's comment and enrich-lib.sh's kind_extra_slots.
+# SPECIAL_DATES_FILE (optional, DATE|NAME -- same shape as HOLIDAYS_FILE)
+# and KEY_EVENTS_FILE (optional, DATE|START_TIME|END_TIME|NAME -- the
+# same file render-events.sh's Key Events table already reads) each add
+# their own category to the Notes column, alongside the maintainer note
+# and holiday notes -- see enrich-lib.sh's week_special_date_notes/
+# week_key_event_notes. Categories are scanned and appended in a fixed
+# order (maintainer note, then holidays, then special dates, then key
+# events), not interleaved by day -- a course whose Notes column needs a
+# specific day-by-day interleaving instead isn't served by this
+# convenience path.
 render_markdown_calendar() {
     local kinds_conf="$1" start_monday="$2" num_weeks="$3" recess_after="$4"
     local titles_file="$5" allowlist_file="$6" labels_file="$7" notes_file="$8"
@@ -398,6 +408,7 @@ render_markdown_calendar() {
     local kind_extra_links_file="${12:-}" extra_links_file="${13:-}"
     local occasion_links_file="${14:-}" graded_file="${15:-}"
     local extra_slots_file="${16:-}"
+    local special_dates_file="${17:-}" key_events_file="${18:-}"
 
     local -a col_kind col_suffix col_header
     local ck cs ch
@@ -447,13 +458,27 @@ render_markdown_calendar() {
             cell="$(render_kind_cell "$teaching_week" "$k" "$occ_file" "$titles_file" "$allowlist_file" "$labels_file" "$base_url" "$holidays_file" "$emoji_file" "$extra_label" "$extra_links_file" "$occasion_links_file" "$s" "$graded_file" "$extra_slots_file")"
             row="${row} ${cell} |"
         done
-        local note maintainer_note holiday_note
+        local -a note_parts=()
+        local maintainer_note holiday_note special_note key_event_note
         maintainer_note="$(week_note "$teaching_week" "$notes_file")"
+        [ -n "$maintainer_note" ] && note_parts+=("$maintainer_note")
         holiday_note="$(week_holiday_notes "$monday" "$holidays_file" "$emoji_file")"
-        if [ -n "$maintainer_note" ] && [ -n "$holiday_note" ]; then
-            note="${maintainer_note}; ${holiday_note}"
-        else
-            note="${maintainer_note}${holiday_note}"
+        [ -n "$holiday_note" ] && note_parts+=("$holiday_note")
+        if [ -n "$special_dates_file" ]; then
+            special_note="$(week_special_date_notes "$monday" "$special_dates_file")"
+            [ -n "$special_note" ] && note_parts+=("$special_note")
+        fi
+        if [ -n "$key_events_file" ]; then
+            key_event_note="$(week_key_event_notes "$monday" "$key_events_file")"
+            [ -n "$key_event_note" ] && note_parts+=("$key_event_note")
+        fi
+        local note=""
+        if [ ${#note_parts[@]} -gt 0 ]; then
+            note="${note_parts[0]}"
+            local ni
+            for ((ni = 1; ni < ${#note_parts[@]}; ni++)); do
+                note="${note}; ${note_parts[$ni]}"
+            done
         fi
         [ -z "$note" ] && note="-"
         row="${row} ${note} |"

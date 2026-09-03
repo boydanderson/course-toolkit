@@ -45,7 +45,15 @@
 #   EMOJI_FILE            default: config/holiday-emoji.conf
 #   KEY_EVENTS_FILE       default: config/key-events.conf (optional -- a
 #                          table of one-off dated events appended after
-#                          the main calendar; see render-events.sh)
+#                          the main calendar; see render-events.sh. Also
+#                          fed into `readme`'s own Notes column -- see
+#                          SPECIAL_DATES_FILE below)
+#   SPECIAL_DATES_FILE    default: config/special-dates.conf (optional,
+#                          DATE|NAME -- `readme` only. Surfaces a non-
+#                          holiday calendar marker in the weekly Notes
+#                          column, e.g. an institution's own academic-
+#                          calendar entries; see enrich-lib.sh's
+#                          week_special_date_notes/week_key_event_notes)
 #   RESOURCES_HTML_FILE   default: config/canvas-resources.html (optional
 #                          -- appended verbatim under a "Resources"
 #                          heading in `canvas`'s output)
@@ -133,6 +141,7 @@ NOTES="${NOTES_FILE:-$COURSE_ROOT/config/week-notes.conf}"
 HOLIDAYS="${HOLIDAYS_FILE:-$COURSE_ROOT/config/holidays.conf}"
 EMOJI="${EMOJI_FILE:-$COURSE_ROOT/config/holiday-emoji.conf}"
 KEY_EVENTS="${KEY_EVENTS_FILE:-$COURSE_ROOT/config/key-events.conf}"
+SPECIAL_DATES="${SPECIAL_DATES_FILE:-$COURSE_ROOT/config/special-dates.conf}"
 RESOURCES_HTML="${RESOURCES_HTML_FILE:-$COURSE_ROOT/config/canvas-resources.html}"
 RESOURCES_MD="${RESOURCES_MD_FILE:-$COURSE_ROOT/config/readme-resources.md}"
 KIND_EXTRA_LINKS="${KIND_EXTRA_LINKS_FILE:-$COURSE_ROOT/config/kind-extra-links.conf}"
@@ -209,7 +218,8 @@ cmd_readme() {
     _walk_semester "$titles"
     render_markdown_calendar "$SESSION_KINDS" "$SEMESTER_START_MONDAY" \
         "$NUM_WEEKS" "$RECESS_AFTER_WEEK" "$titles" "$ALLOWLIST" "$LABELS" "$NOTES" \
-        "$PDF_BASE_URL" "$HOLIDAYS" "$EMOJI" "$KIND_EXTRA_LINKS" "$EXTRA_LINKS" "$OCCASION_LINKS" "$GRADED_SLOTS" "$EXTRA_SLOTS"
+        "$PDF_BASE_URL" "$HOLIDAYS" "$EMOJI" "$KIND_EXTRA_LINKS" "$EXTRA_LINKS" "$OCCASION_LINKS" "$GRADED_SLOTS" "$EXTRA_SLOTS" \
+        "$SPECIAL_DATES" "$KEY_EVENTS"
     rm -f "$titles"
 
     local key_events

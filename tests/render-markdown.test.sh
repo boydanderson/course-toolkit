@@ -348,5 +348,25 @@ EOF
     assert_contains "maintainer note and holiday note join with '; '" \
         "$out" "Maintainer note; ⚠️ Thursday: Non-Class Holiday"
 
+    # All four Notes categories together, in fixed order (maintainer,
+    # holiday, special date, key event) -- SPECIAL_DATES_FILE (17th) and
+    # KEY_EVENTS_FILE (18th) are new optional trailing params.
+    local special_dates_file="$scratch/special-dates.conf"
+    printf '2026-08-11|Special Day\n' > "$special_dates_file"
+    local key_events_file="$scratch/key-events.conf"
+    printf '2026-08-12|10:00|12:00|Info Session\n' > "$key_events_file"
+    out="$(render_markdown_calendar "$kinds" 2026-08-10 1 0 "$titles" "$allowlist" \
+        /dev/null "$week_notes_file" https://example.org/pdfs "$nonclass_holidays" "$emoji" \
+        "" "" "" "" "" "$special_dates_file" "$key_events_file")"
+    assert_contains "all four Notes categories combine in the fixed order" \
+        "$out" "Maintainer note; ⚠️ Thursday: Non-Class Holiday; 📅 Tuesday: Special Day; 📌 Wednesday: Info Session (10:00-12:00)"
+
+    # Backward compat: omitting SPECIAL_DATES_FILE/KEY_EVENTS_FILE
+    # entirely still behaves exactly as before Part A.
+    out="$(render_markdown_calendar "$kinds" 2026-08-10 1 0 "$titles" "$allowlist" \
+        /dev/null "$week_notes_file" https://example.org/pdfs "$nonclass_holidays" "$emoji")"
+    assert_not_contains "no special_dates_file/key_events_file: no stray categories appear" \
+        "$out" "📅"
+
     rm -rf "$scratch"
 }

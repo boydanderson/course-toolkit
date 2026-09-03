@@ -147,5 +147,36 @@ EOF
         "⚠️ Tuesday: Not Mapped Holiday" \
         "$(week_holiday_notes 2026-10-05 "$scratch/unmapped-holiday.conf" "$scratch/emoji.conf")"
 
+    # week_special_date_notes -- same DATE|NAME shape and Mon..Sun scan
+    # as week_holiday_notes, no emoji lookup.
+    printf '2026-10-06|Reading Week Begins\n' > "$scratch/special-dates.conf"
+    assert_eq "week_special_date_notes: single match" \
+        "📅 Tuesday: Reading Week Begins" \
+        "$(week_special_date_notes 2026-10-05 "$scratch/special-dates.conf")"
+    printf '2026-10-06|First Special\n2026-10-09|Second Special\n' > "$scratch/multi-special-dates.conf"
+    assert_eq "week_special_date_notes: two matches, joined and in Mon..Sun order" \
+        "📅 Tuesday: First Special; 📅 Friday: Second Special" \
+        "$(week_special_date_notes 2026-10-05 "$scratch/multi-special-dates.conf")"
+    assert_eq "week_special_date_notes: no match in this week is empty" \
+        "" "$(week_special_date_notes 2026-09-28 "$scratch/special-dates.conf")"
+    assert_eq "week_special_date_notes: missing file is empty, not an error" \
+        "" "$(week_special_date_notes 2026-10-05 "$scratch/nope.conf")"
+
+    # week_key_event_notes -- reads the same DATE|START_TIME|END_TIME|NAME
+    # shape render-events.sh's Key Events table already uses.
+    printf '2026-10-09|18:00|21:00|Sumobot Competition\n' > "$scratch/key-events.conf"
+    assert_eq "week_key_event_notes: single match" \
+        "📌 Friday: Sumobot Competition (18:00-21:00)" \
+        "$(week_key_event_notes 2026-10-05 "$scratch/key-events.conf")"
+    printf '2026-10-06|09:00|11:00|Quiz\n2026-10-09|18:00|21:00|Sumobot Competition\n' \
+        > "$scratch/multi-key-events.conf"
+    assert_eq "week_key_event_notes: two matches, joined and in Mon..Sun order" \
+        "📌 Tuesday: Quiz (09:00-11:00); 📌 Friday: Sumobot Competition (18:00-21:00)" \
+        "$(week_key_event_notes 2026-10-05 "$scratch/multi-key-events.conf")"
+    assert_eq "week_key_event_notes: no match in this week is empty" \
+        "" "$(week_key_event_notes 2026-09-28 "$scratch/key-events.conf")"
+    assert_eq "week_key_event_notes: missing file is empty, not an error" \
+        "" "$(week_key_event_notes 2026-10-05 "$scratch/nope.conf")"
+
     rm -rf "$scratch"
 }

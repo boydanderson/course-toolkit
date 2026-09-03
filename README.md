@@ -146,6 +146,16 @@ existing course's output is completely unaffected by their existence:
   `config/key-events.conf`, format `DATE|START_TIME|END_TIME|NAME`, one
   per line. `cli readme`/`cli canvas` append it after the main calendar
   table automatically if the file exists and has real rows.
+- **Extra Notes-column categories** (`cli readme` only) — besides real
+  holidays (`week_holiday_notes`, always on if `HOLIDAYS_FILE` is set),
+  the weekly Notes column can also surface a non-holiday calendar marker
+  (`config/special-dates.conf`, format `DATE|NAME`) and the same one-off
+  events `config/key-events.conf` already lists for the Key Events table
+  above — a course populating that file for the table gets its events in
+  the weekly Notes column too, at no extra config cost. All categories
+  append in a fixed order (maintainer note, holidays, special dates, key
+  events), not interleaved by day. See `core/enrich-lib.sh`'s
+  `week_special_date_notes`/`week_key_event_notes`.
 - **Public Holidays Reference** — a plain legend table of every holiday
   in `config/holidays.conf` falling inside the semester's own span
   (±7 days). `cli readme` only (markdown; no Canvas/HTML equivalent),
