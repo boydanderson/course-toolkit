@@ -64,6 +64,11 @@
 #                          LINK2_URL -- up to 2 links for an occasion
 #                          label from LABELS_FILE, e.g. an assessment's
 #                          "Details"/"Papers")
+#   GRADED_SLOTS_FILE      default: config/graded-slots.conf (optional,
+#                          one SLOT_ID per line -- marks a real
+#                          occurrence as graded/important with a "🔴 "
+#                          title prefix in both readme/canvas; see
+#                          enrich-lib.sh's is_graded_slot)
 #
 # config/course.mk additionally supplies (beyond COURSE_CODE/COURSE_NAME/
 # HOSTING_ORG/CANVAS_HOST/RENDERER, see README):
@@ -118,6 +123,7 @@ RESOURCES_MD="${RESOURCES_MD_FILE:-$COURSE_ROOT/config/readme-resources.md}"
 KIND_EXTRA_LINKS="${KIND_EXTRA_LINKS_FILE:-$COURSE_ROOT/config/kind-extra-links.conf}"
 EXTRA_LINKS="${EXTRA_LINKS_FILE:-$COURSE_ROOT/config/extra-links.conf}"
 OCCASION_LINKS="${OCCASION_LINKS_FILE:-$COURSE_ROOT/config/occasion-links.conf}"
+GRADED_SLOTS="${GRADED_SLOTS_FILE:-$COURSE_ROOT/config/graded-slots.conf}"
 
 SEMESTER_START_MONDAY="$(get_course_var SEMESTER_START_MONDAY)"
 NUM_WEEKS="$(get_course_var NUM_WEEKS)"
@@ -186,7 +192,7 @@ cmd_readme() {
     _walk_semester "$titles"
     render_markdown_calendar "$SESSION_KINDS" "$SEMESTER_START_MONDAY" \
         "$NUM_WEEKS" "$RECESS_AFTER_WEEK" "$titles" "$ALLOWLIST" "$LABELS" "$NOTES" \
-        "$PDF_BASE_URL" "$HOLIDAYS" "$EMOJI" "$KIND_EXTRA_LINKS" "$EXTRA_LINKS" "$OCCASION_LINKS"
+        "$PDF_BASE_URL" "$HOLIDAYS" "$EMOJI" "$KIND_EXTRA_LINKS" "$EXTRA_LINKS" "$OCCASION_LINKS" "$GRADED_SLOTS"
     rm -f "$titles"
 
     local key_events
@@ -215,7 +221,7 @@ cmd_canvas() {
     render_html_calendar "$SESSION_KINDS" "$SEMESTER_START_MONDAY" \
         "$NUM_WEEKS" "$RECESS_AFTER_WEEK" "$titles" "$ALLOWLIST" "$LABELS" "$NOTES" \
         "$PDF_BASE_URL" "$HOLIDAYS" "$EMOJI" "$CALENDAR_PALETTE" "" \
-        "$KIND_EXTRA_LINKS" "$EXTRA_LINKS" "$OCCASION_LINKS"
+        "$KIND_EXTRA_LINKS" "$EXTRA_LINKS" "$OCCASION_LINKS" "$GRADED_SLOTS"
     rm -f "$titles"
 
     local key_events

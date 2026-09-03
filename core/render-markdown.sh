@@ -96,8 +96,8 @@ _occasion_links_markdown() {
 
 # render_kind_cell WEEK KIND_ID OCCURRENCES_FILE TITLES_FILE ALLOWLIST_FILE
 # LABELS_FILE PDF_BASE_URL HOLIDAYS_FILE EMOJI_FILE [EXTRA_LINK_LABEL]
-# [EXTRA_LINK_FILE] [OCCASION_LINKS_FILE] [SUFFIX_FILTER] -> this week's
-# cell text for one kind column, "-" if nothing scheduled and no
+# [EXTRA_LINK_FILE] [OCCASION_LINKS_FILE] [SUFFIX_FILTER] [GRADED_FILE]
+# -> this week's cell text for one kind column, "-" if nothing scheduled and no
 # override label. OCCURRENCES_FILE holds this week's full
 # week_occurrences() output (computed once per week by the caller,
 # filtered here by KIND_ID) -- multiple occurrences of the same kind
@@ -122,14 +122,26 @@ _occasion_links_markdown() {
 # the simpler "only when nothing scheduled at this specific slot" rule
 # is both sufficient and correct -- the unconditional check exists only
 # to handle a merged cell where a sibling occurrence's presence would
-# otherwise hide the label. OCCASION_LINKS_FILE (optional) gives the
-# label up to 2 links either way.
+# otherwise hide the label. With a filter, the label lookup also tries a
+# suffix-qualified key first ("${KIND_ID}-${SUFFIX}", e.g. "studio-A" --
+# not a real session-kind id, just this lookup's own convention), falling
+# back to the plain KIND_ID if no suffix-specific row exists -- lets two
+# different suffixes excluded the same week carry two different labels
+# (e.g. week 12's Session 1 "OT OT" vs. Session 2 "Trial"), while an
+# existing single-label-shared-across-suffixes config (the plain KIND_ID
+# key) keeps working unchanged. OCCASION_LINKS_FILE (optional) gives the
+# label up to 2 links either way, looked up under whichever key the
+# label itself matched. GRADED_FILE (optional, one SLOT_ID per line --
+# see enrich-lib.sh's is_graded_slot) marks a real occurrence as
+# graded/important by prefixing its title with "🔴 " -- a course that
+# doesn't create GRADED_FILE just gets no slot marked.
 render_kind_cell() {
     local week="$1" kind_id="$2" occurrences_file="$3" titles_file="$4"
     local allowlist_file="$5" labels_file="$6" base_url="$7"
     local holidays_file="$8" emoji_file="$9"
     local extra_link_label="${10:-}" extra_link_file="${11:-}"
     local occasion_links_file="${12:-}" suffix_filter="${13:-}"
+    local graded_file="${14:-}"
     local rows
     if [ -n "$suffix_filter" ]; then
         rows=$(awk -F'|' -v k="$kind_id" -v s="$suffix_filter" '$1==k && $6==s' "$occurrences_file")
@@ -138,11 +150,23 @@ render_kind_cell() {
     fi
 
     local cell_parts=()
-    local occ_label
-    occ_label="$(slot_kind_label "$week" "$kind_id" "$labels_file")"
+    # label_key: with a suffix filter, try a suffix-qualified key first
+    # ("studio-A", not a real session-kind id, just this lookup's own
+    # convention) so two different suffixes excluded the same week can
+    # carry two different labels (e.g. week 12's Session 1 "OT OT" vs.
+    # Session 2 "Trial") -- falls back to the plain kind_id (today's
+    # only behavior) if no suffix-specific row exists, so an existing
+    # single-label-shared-across-suffixes config keeps working unchanged.
+    local label_key="$kind_id" occ_label
+    [ -n "$suffix_filter" ] && label_key="${kind_id}-${suffix_filter}"
+    occ_label="$(slot_kind_label "$week" "$label_key" "$labels_file")"
+    if [ -z "$occ_label" ] && [ -n "$suffix_filter" ]; then
+        label_key="$kind_id"
+        occ_label="$(slot_kind_label "$week" "$label_key" "$labels_file")"
+    fi
     if [ -n "$occ_label" ] && { [ -z "$suffix_filter" ] || [ -z "$rows" ]; }; then
         local occ_raw occ_links_md occ_part="$occ_label"
-        occ_raw="$(occasion_links "$week" "$kind_id" "$occasion_links_file")"
+        occ_raw="$(occasion_links "$week" "$label_key" "$occasion_links_file")"
         if [ -n "$occ_raw" ]; then
             occ_links_md="$(_occasion_links_markdown "$occ_raw")"
             [ -n "$occ_links_md" ] && occ_part="${occ_label} (${occ_links_md})"
@@ -171,6 +195,9 @@ render_kind_cell() {
         local title released links extra_url=""
         title="$(slot_title "$rslot" "$titles_file")"
         title="$(compose_slot_title "$rslot" "$title")"
+        if [ -n "$graded_file" ] && is_graded_slot "$rslot" "$graded_file"; then
+            title="🔴 ${title}"
+        fi
         if is_slot_released "$rslot" "$allowlist_file"; then
             released=1
         else
@@ -210,13 +237,16 @@ render_kind_cell() {
 # want a second link per occurrence for any kind just never creates
 # KIND_EXTRA_LINKS_FILE. OCCASION_LINKS_FILE (optional) is
 # occasion_links' own WEEK|KIND_ID|... file, giving an occasion label up
-# to 2 optional links -- see render_kind_cell's comment.
+# to 2 optional links -- see render_kind_cell's comment. GRADED_FILE
+# (optional, one SLOT_ID per line) marks real occurrences as graded/
+# important with a "🔴 " title prefix -- see render_kind_cell's comment
+# and enrich-lib.sh's is_graded_slot.
 render_markdown_calendar() {
     local kinds_conf="$1" start_monday="$2" num_weeks="$3" recess_after="$4"
     local titles_file="$5" allowlist_file="$6" labels_file="$7" notes_file="$8"
     local base_url="$9" holidays_file="${10}" emoji_file="${11}"
     local kind_extra_links_file="${12:-}" extra_links_file="${13:-}"
-    local occasion_links_file="${14:-}"
+    local occasion_links_file="${14:-}" graded_file="${15:-}"
 
     local -a col_kind col_suffix col_header
     local ck cs ch
@@ -263,7 +293,7 @@ render_markdown_calendar() {
             local k="${col_kind[$i]}" s="${col_suffix[$i]}"
             local cell extra_label=""
             [ -n "$kind_extra_links_file" ] && extra_label="$(kind_extra_link_label "$k" "$kind_extra_links_file")"
-            cell="$(render_kind_cell "$teaching_week" "$k" "$occ_file" "$titles_file" "$allowlist_file" "$labels_file" "$base_url" "$holidays_file" "$emoji_file" "$extra_label" "$extra_links_file" "$occasion_links_file" "$s")"
+            cell="$(render_kind_cell "$teaching_week" "$k" "$occ_file" "$titles_file" "$allowlist_file" "$labels_file" "$base_url" "$holidays_file" "$emoji_file" "$extra_label" "$extra_links_file" "$occasion_links_file" "$s" "$graded_file")"
             row="${row} ${cell} |"
         done
         local note

@@ -13,6 +13,12 @@ test_enrich_lib() {
     assert_failure "is_slot_released: unlisted ID" is_slot_released L2A "$scratch/allowlist.conf"
     assert_failure "is_slot_released: missing file doesn't crash" is_slot_released L1A "$scratch/nope.conf"
 
+    # is_graded_slot -- same allow-list shape, different purpose
+    printf 'Studio8\nStudio14\n' > "$scratch/graded.conf"
+    assert_success "is_graded_slot: listed ID" is_graded_slot Studio8 "$scratch/graded.conf"
+    assert_failure "is_graded_slot: unlisted ID" is_graded_slot Studio1 "$scratch/graded.conf"
+    assert_failure "is_graded_slot: missing file doesn't crash" is_graded_slot Studio8 "$scratch/nope.conf"
+
     # slot_title -- regression: must not abort under set -e when nothing matches
     printf 'L1A|Introduction\n' > "$scratch/titles.conf"
     assert_eq "slot_title: found" "Introduction" "$(slot_title L1A "$scratch/titles.conf")"

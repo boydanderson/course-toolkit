@@ -23,6 +23,18 @@ is_slot_released() {
     grep -vE '^\s*#|^\s*$' "$allowlist_file" | grep -Fxq "$slot_id"
 }
 
+# is_graded_slot SLOT_ID GRADED_FILE -> success (0) if SLOT_ID is
+# listed, failure (1) otherwise. One ID per line, comments/blanks
+# ignored -- same allow-list shape as is_slot_released, but for marking
+# a slot as graded/important in the calendar table (e.g. a checkpoint
+# or a trial run) rather than gating a PDF release. Optional: a course
+# that doesn't create GRADED_FILE just gets no slot marked.
+is_graded_slot() {
+    local slot_id="$1" graded_file="$2"
+    [ -f "$graded_file" ] || return 1
+    grep -vE '^\s*#|^\s*$' "$graded_file" | grep -Fxq "$slot_id"
+}
+
 # slot_title SLOT_ID TITLES_FILE -> the slot's display title, empty if
 # none recorded. Format: SLOT_ID|TITLE.
 slot_title() {

@@ -172,7 +172,19 @@ existing course's output is completely unaffected by their existence:
   optional links (e.g. an assessment's "Details"/"Papers") via
   `config/occasion-links.conf`, format `WEEK|KIND_ID|LINK1_LABEL|
   LINK1_URL|LINK2_LABEL|LINK2_URL` (either URL may be empty — pending,
-  same convention as everywhere else).
+  same convention as everywhere else). With a split column (a kind
+  with more than one weekly occurrence), the label lookup also tries a
+  suffix-qualified key first (`KIND_ID-SUFFIX`, e.g. `studio-A`) before
+  falling back to the plain `KIND_ID` — lets two different suffixes
+  excluded the same week carry two different labels (e.g. one session's
+  "OT OT" vs. the other's "Trial"), not just one label shared across
+  whichever suffix is empty that week.
+- **Graded/important slot marking** — `config/graded-slots.conf`, one
+  `SLOT_ID` per line, prefixes that occurrence's title with "🔴 " in
+  both `readme`/`canvas` — for flagging a checkpoint, a graded
+  deliverable, or any other session worth calling out visually. Purely
+  a display marker; doesn't affect release gating, versioning, or
+  anything else.
 
 ## Using it
 

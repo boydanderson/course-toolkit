@@ -91,6 +91,17 @@ EOF
     assert_contains "released slot still gets a real <a> link" \
         "$out" '<a href="https://example.org/pdfs/lecture-L1A.view.pdf">View</a>'
 
+    # GRADED_FILE (17th positional arg): marks a real occurrence's title
+    # with a "🔴 " prefix.
+    local graded="$scratch/graded.conf"
+    printf 'L1A\n' > "$graded"
+    local graded_out
+    graded_out="$(render_html_calendar "$kinds2" 2026-08-10 1 0 "$titles" "$allowlist2" \
+        /dev/null /dev/null https://example.org/pdfs /dev/null /dev/null \
+        "" "" "" "" "" "$graded")"
+    assert_contains "graded slot's title gets a 🔴 prefix" "$graded_out" "🔴 L1A"
+    assert_not_contains "non-graded slot (L1B) gets no prefix" "$graded_out" "🔴 L1B"
+
     local occ_row_count
     occ_row_count="$(echo "$out" | grep -o '<div style="font-weight:600;">' | wc -l | tr -d ' ')"
     assert_eq "two occurrences in one week each get their own title <div>" "2" "$occ_row_count"
@@ -290,6 +301,34 @@ EOF
         "$week4_row" "Reading Assessment 1"
     assert_not_contains "occasion: no Details/Papers text without the file" \
         "$week4_row" "Details"
+
+    # Per-suffix labels: real gap found via epp2-toolkit-poc -- when
+    # BOTH suffixes of a split kind are excluded the same week, a
+    # suffix-qualified key ("${KIND_ID}-${SUFFIX}") lets each column get
+    # its own label instead of one shared WEEK|KIND_ID key.
+    local kinds4="$scratch/session-kinds4.conf"
+    printf 'lecture|Lecture|wed|A|L{n}{suffix}|view,print|1|13|4\n' > "$kinds4"
+    printf 'lecture|Lecture|fri|B|L{n}{suffix}|view,print|1|13|4\n' >> "$kinds4"
+    local per_suffix_labels="$scratch/per-suffix-labels.conf"
+    printf '4|lecture-A|OT OT\n4|lecture-B|Trial\n' > "$per_suffix_labels"
+    out="$(render_html_calendar "$kinds4" 2026-08-10 4 0 /dev/null /dev/null \
+        "$per_suffix_labels" /dev/null https://x /dev/null /dev/null)"
+    local week4_row2
+    week4_row2="$(echo "$out" | grep '>4</td>')"
+    assert_contains "per-suffix: Session 1 column shows its own label" "$week4_row2" "OT OT"
+    assert_contains "per-suffix: Session 2 column shows its own (different) label" "$week4_row2" "Trial"
+
+    # Backward compat: a plain (non-suffix-qualified) key still shows in
+    # BOTH excluded suffixes' columns, unchanged from before this feature.
+    local shared_label="$scratch/shared-label.conf"
+    printf '4|lecture|Shared Label\n' > "$shared_label"
+    out="$(render_html_calendar "$kinds4" 2026-08-10 4 0 /dev/null /dev/null \
+        "$shared_label" /dev/null https://x /dev/null /dev/null)"
+    week4_row2="$(echo "$out" | grep '>4</td>')"
+    local shared_label_count
+    shared_label_count="$(echo "$week4_row2" | grep -o "Shared Label" | wc -l | tr -d ' ')"
+    assert_eq "fallback: plain kind_id key shows in BOTH excluded suffixes' columns" \
+        "2" "$shared_label_count"
 
     # Recess row: inserted between teaching weeks RECESS_AFTER_WEEK and
     # RECESS_AFTER_WEEK+1 when RECESS_AFTER_WEEK > 0 -- same dates as

@@ -23,6 +23,17 @@ test_render_markdown() {
     assert_not_contains "unreleased slot has no markdown link syntax for itself" \
         "$(echo "$out" | grep '| 4 |')" "[View](https://example.org/pdfs/lecture-L4B"
 
+    # GRADED_FILE (15th positional arg): marks a real occurrence's title
+    # with a "🔴 " prefix.
+    local graded="$scratch/graded.conf"
+    printf 'L4A\n' > "$graded"
+    out="$(render_markdown_calendar "$kinds" 2026-08-10 4 0 "$titles" "$allowlist" \
+        /dev/null /dev/null https://example.org/pdfs /dev/null /dev/null \
+        "" "" "" "$graded")"
+    assert_contains "graded slot's title gets a 🔴 prefix" "$out" "🔴 L4A: A Real Title"
+    assert_not_contains "non-graded slot (L4B) gets no prefix" \
+        "$(echo "$out" | grep '| 4 |')" "🔴 L4B"
+
     # <br>-joining inside one cell is still real, tested code: it fires
     # whenever render_kind_cell's own occurrences_file has >1 row for the
     # given kind_id -- always true for a merged (no SUFFIX_FILTER) call,
@@ -182,6 +193,38 @@ EOF
         "$week4_row" "Reading Assessment 1"
     assert_not_contains "occasion: no Details/Papers text without the file" \
         "$week4_row" "Details"
+
+    # Per-suffix labels: real gap found via epp2-toolkit-poc -- when
+    # BOTH suffixes of a split kind are excluded the same week (e.g. a
+    # "OT OT" Session 1 and a "Trial" Session 2), the plain WEEK|KIND_ID
+    # key can't tell them apart; a suffix-qualified key
+    # ("${KIND_ID}-${SUFFIX}") lets each column get its own label.
+    local kinds4="$scratch/session-kinds4.conf"
+    printf 'lecture|Lecture|wed|A|L{n}{suffix}|view,print|1|13|4\n' > "$kinds4"
+    printf 'lecture|Lecture|fri|B|L{n}{suffix}|view,print|1|13|4\n' >> "$kinds4"
+    local per_suffix_labels="$scratch/per-suffix-labels.conf"
+    printf '4|lecture-A|OT OT\n4|lecture-B|Trial\n' > "$per_suffix_labels"
+    out="$(render_markdown_calendar "$kinds4" 2026-08-10 4 0 /dev/null /dev/null \
+        "$per_suffix_labels" /dev/null https://x /dev/null /dev/null)"
+    local week4_row2
+    week4_row2="$(echo "$out" | grep '^| 4 |')"
+    assert_contains "per-suffix: Session 1 column shows its own label" "$week4_row2" "OT OT"
+    assert_contains "per-suffix: Session 2 column shows its own (different) label" "$week4_row2" "Trial"
+
+    # Backward compat: a plain (non-suffix-qualified) key still works
+    # unchanged when only one suffix is excluded -- exactly the existing
+    # "Reading Assessment 1" fixture above already covers this, but
+    # confirm the fallback explicitly with a kind_id-only labels file
+    # against the same per-suffix-capable fixture.
+    local shared_label="$scratch/shared-label.conf"
+    printf '4|lecture|Shared Label\n' > "$shared_label"
+    out="$(render_markdown_calendar "$kinds4" 2026-08-10 4 0 /dev/null /dev/null \
+        "$shared_label" /dev/null https://x /dev/null /dev/null)"
+    week4_row2="$(echo "$out" | grep '^| 4 |')"
+    local shared_label_count
+    shared_label_count="$(echo "$week4_row2" | grep -o "Shared Label" | wc -l | tr -d ' ')"
+    assert_eq "fallback: plain kind_id key shows in BOTH excluded suffixes' columns (unchanged pre-per-suffix behavior)" \
+        "2" "$shared_label_count"
 
     # Recess row: inserted between teaching weeks RECESS_AFTER_WEEK and
     # RECESS_AFTER_WEEK+1 when RECESS_AFTER_WEEK > 0 -- matches
