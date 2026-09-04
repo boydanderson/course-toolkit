@@ -32,6 +32,13 @@ test_render_html() {
     assert_contains "holiday cancellation renders in the cancelled style" "$out" "No Lecture (🎉 Test Holiday)"
     assert_contains "cancellation is styled distinctly (bold red)" "$out" "font-weight:600;color:#c0392b;"
 
+    # HOLIDAY_FIRST (23rd param): swaps the cancellation phrase order --
+    # mirrors render-markdown.sh's render_kind_cell's own HOLIDAY_FIRST.
+    out="$(render_html_calendar "$kinds" 2026-08-10 1 0 /dev/null /dev/null \
+        /dev/null /dev/null https://x "$holidays" "$emoji" "" "" "" "" "" "" "" "" "" "" "" 1)"
+    assert_contains "HOLIDAY_FIRST: holiday name comes first" "$out" "🎉 Test Holiday (No Lecture)"
+    assert_not_contains "HOLIDAY_FIRST: default phrase order is gone" "$out" "No Lecture (🎉 Test Holiday)"
+
     # CONFLICT_HOLIDAY (9th column in week_occurrences' own output, see
     # schedule-lib.sh's HOLIDAY_CONFLICT_WEEKS): overrides the
     # cancellation branch above -- renders normally (title + links) with

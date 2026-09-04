@@ -131,6 +131,11 @@
 #   CALENDAR_SHOW_WEEK_DATES  any non-empty value -> `canvas` shows a
 #                          date-range sub-line under every week's number
 #                          (e.g. "10 Aug – 14 Aug"). Unset/empty = off.
+#   HOLIDAY_FIRST          any non-empty value -> both `readme` and
+#                          `canvas` swap a cancelled occurrence's phrase
+#                          order to "<holiday> (No <label>)" instead of
+#                          "No <label> (<holiday>)". Unset/empty keeps
+#                          the default order.
 set -euo pipefail
 
 CLI_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -272,7 +277,7 @@ cmd_canvas() {
         "$NUM_WEEKS" "$RECESS_AFTER_WEEK" "$titles" "$ALLOWLIST" "$LABELS" "$NOTES" \
         "$PDF_BASE_URL" "$HOLIDAYS" "$EMOJI" "$CALENDAR_PALETTE" "" \
         "$KIND_EXTRA_LINKS" "$EXTRA_LINKS" "$OCCASION_LINKS" "$GRADED_SLOTS" "$EXTRA_SLOTS" "$EXTRA_NOTE" \
-        "$SPECIAL_DATES" "$KEY_EVENTS" "$CALENDAR_SHOW_WEEK_DATES"
+        "$SPECIAL_DATES" "$KEY_EVENTS" "$CALENDAR_SHOW_WEEK_DATES" "$HOLIDAY_FIRST"
     rm -f "$titles"
 
     local key_events

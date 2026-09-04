@@ -230,6 +230,12 @@ _occasion_links_html() {
 # EXTRA_SLOTS_FILE above), since a supplementary linked file doesn't
 # generally carry its own separate reading list.
 #
+# HOLIDAY_FIRST (18th, optional, any non-empty value) swaps the
+# cancellation phrase order from "No <label> (<holiday>)" to "<holiday>
+# (No <label>)" -- mirrors render-markdown.sh's render_kind_cell's own
+# HOLIDAY_FIRST exactly. Default unset preserves every existing
+# consumer's exact current text.
+#
 # OCCURRENCES_FILE's own 9th column, CONFLICT_HOLIDAY (schedule-lib.sh's
 # week_occurrences), overrides the holiday-cancellation rendering above
 # when non-empty for a row -- a collision the maintainer has already
@@ -246,6 +252,7 @@ render_kind_cell_html() {
     local extra_link_label="${11:-}" extra_link_file="${12:-}"
     local occasion_links_file="${13:-}" suffix_filter="${14:-}"
     local graded_file="${15:-}" extra_slots_file="${16:-}" extra_note_file="${17:-}"
+    local holiday_first="${18:-}"
     _calendar_palette "$palette"
     local rows
     local -a extra_slot_ids=()
@@ -318,7 +325,11 @@ render_kind_cell_html() {
             local emoji prefix=""
             emoji="$(holiday_emoji "$holiday_name" "$emoji_file")"
             [ -n "$emoji" ] && prefix="${emoji} "
-            cell_html="${cell_html}<div style=\"${cancelled_style}\">No $(echo "$rlabel" | _html_escape) (${prefix}$(echo "$holiday_name" | _html_escape))</div>"
+            if [ -n "$holiday_first" ]; then
+                cell_html="${cell_html}<div style=\"${cancelled_style}\">${prefix}$(echo "$holiday_name" | _html_escape) (No $(echo "$rlabel" | _html_escape))</div>"
+            else
+                cell_html="${cell_html}<div style=\"${cancelled_style}\">No $(echo "$rlabel" | _html_escape) (${prefix}$(echo "$holiday_name" | _html_escape))</div>"
+            fi
             any_cancelled=1
             continue
         }
@@ -400,7 +411,8 @@ render_kind_cell_html() {
 # week_key_event_notes. SHOW_WEEK_DATES (22nd, optional, any non-empty
 # value) appends a "10 Aug – 14 Aug" sub-line under every week's number
 # (every week, not just the current one) -- off by default, so a course
-# that doesn't set it sees no change.
+# that doesn't set it sees no change. HOLIDAY_FIRST (23rd, optional) --
+# see render_kind_cell_html's own comment; threads straight through.
 render_html_calendar() {
     local kinds_conf="$1" start_monday="$2" num_weeks="$3" recess_after="$4"
     local titles_file="$5" allowlist_file="$6" labels_file="$7" notes_file="$8"
@@ -410,6 +422,7 @@ render_html_calendar() {
     local occasion_links_file="${16:-}" graded_file="${17:-}"
     local extra_slots_file="${18:-}" extra_note_file="${19:-}"
     local special_dates_file="${20:-}" key_events_file="${21:-}" show_week_dates="${22:-}"
+    local holiday_first="${23:-}"
     [ -z "$today" ] && today="$(sgt_date '+%Y-%m-%d')"
     _calendar_palette "$palette"
 
@@ -519,7 +532,7 @@ render_html_calendar() {
             local k="${col_kind[$i]}" s="${col_suffix[$i]}"
             local cell extra_label=""
             [ -n "$kind_extra_links_file" ] && extra_label="$(kind_extra_link_label "$k" "$kind_extra_links_file")"
-            cell="$(render_kind_cell_html "$teaching_week" "$k" "$occ_file" "$titles_file" "$allowlist_file" "$labels_file" "$base_url" "$holidays_file" "$emoji_file" "$palette" "$extra_label" "$extra_links_file" "$occasion_links_file" "$s" "$graded_file" "$extra_slots_file" "$extra_note_file")"
+            cell="$(render_kind_cell_html "$teaching_week" "$k" "$occ_file" "$titles_file" "$allowlist_file" "$labels_file" "$base_url" "$holidays_file" "$emoji_file" "$palette" "$extra_label" "$extra_links_file" "$occasion_links_file" "$s" "$graded_file" "$extra_slots_file" "$extra_note_file" "$holiday_first")"
             printf '<td style="%s">%s</td>' "$row_style" "$cell"
         done
         local -a note_parts=()
