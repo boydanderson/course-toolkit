@@ -18,6 +18,8 @@
 #   nus_recess_after_week SEMESTER_START_MONDAY - the teaching week
 #                                            number a fetched recess follows (0
 #                                            if none), from NUS_SPECIAL_DATES
+#   nus_academic_semester START_DATE       - "SEMESTER|AY_START_YEAR|AY_END_YEAR"
+#                                            for a semester starting on START_DATE
 #
 # Fetch functions return 0 on success, 1 on failure.
 # See fetch-calendar-data.sh for the orchestrator that turns this into a
@@ -305,6 +307,43 @@ nus_recess_after_week() {
     done
 
     echo $((week_num - 1))
+}
+
+# nus_academic_semester START_DATE -> "SEMESTER|AY_START_YEAR|AY_END_YEAR"
+# (e.g. "1|2026|2027" for an August 2026 start, "2|2025|2026" for a
+# January 2026 start). NUS's academic-year convention: an August-
+# December start is Semester 1 of the academic year beginning that
+# August; a January-July start is Semester 2 of the academic year that
+# began the preceding August. Returns the raw parts, not a formatted
+# label -- callers build their own display string (e.g. "Semester I,
+# 2026/2027" vs a short "ay2627s1" hosting-repo code) from these, same
+# "toolkit computes, course formats" split as holiday_emoji.
+#
+# Consolidates what used to be four independently hand-rolled, silently
+# inconsistent implementations in cs1101s/course-materials: three
+# thresholded on month >= 7 (contradicting their OWN comments, which all
+# say "August"), one correctly used >= 8 -- confirmed for real that a
+# July semester start made them disagree (different academic year,
+# different semester number, different hosting-repo name) even though
+# every site's stated intent was identical. Dormant in practice only
+# because SEMESTER_START_DATE has always been August so far.
+nus_academic_semester() {
+    local start_date="$1"
+    local start_year rest start_month
+    start_year="${start_date%%-*}"
+    rest="${start_date#*-}"
+    start_month="${rest%%-*}"
+    start_month=$((10#$start_month))
+    local ay_start ay_end semester
+    if [ "$start_month" -ge 8 ]; then
+        ay_start="$start_year"
+        semester=1
+    else
+        ay_start=$((start_year - 1))
+        semester=2
+    fi
+    ay_end=$((ay_start + 1))
+    echo "${semester}|${ay_start}|${ay_end}"
 }
 
 fetch_nusmods_exam_dynamic() {

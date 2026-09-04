@@ -50,4 +50,23 @@ test_institutions_nus() {
     NUS_SPECIAL_DATES=("2025-01-01|Recess Week")
     assert_eq "nus_recess_after_week: recess predating semester start -> 0" \
         "0" "$(nus_recess_after_week 2026-08-10)"
+
+    # nus_academic_semester: consolidates what used to be four
+    # independently hand-rolled, silently inconsistent implementations
+    # in cs1101s/course-materials (three thresholded on month >= 7,
+    # contradicting their own "August" comments; one correctly used
+    # >= 8) -- real regression coverage for exactly the case that used
+    # to make them disagree.
+    assert_eq "nus_academic_semester: August start -> Sem 1, AY starts this year" \
+        "1|2026|2027" "$(nus_academic_semester 2026-08-12)"
+    assert_eq "nus_academic_semester: December start -> still Sem 1" \
+        "1|2026|2027" "$(nus_academic_semester 2026-12-01)"
+    assert_eq "nus_academic_semester: January start -> Sem 2, AY started previous year" \
+        "2|2025|2026" "$(nus_academic_semester 2026-01-15)"
+    # The exact boundary case that used to disagree: canvas-hosting-
+    # repo.sh (>= 8) called this Sem 2 of the AY that began the previous
+    # August; build-studio.sh/generate-canvas-html.sh/new-semester-
+    # reset.sh (>= 7) called it Sem 1 of the AY beginning THIS August.
+    assert_eq "nus_academic_semester: July start -> Sem 2 (the regression case)" \
+        "2|2025|2026" "$(nus_academic_semester 2026-07-15)"
 }
