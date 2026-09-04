@@ -100,7 +100,7 @@ EOF
     th_count="$(echo "$out" | grep -o '<th style=' | wc -l | tr -d ' ')"
     assert_eq "a kind with 2 weekly occurrences splits into 2 columns: Week + 2 x Lecture + Notes = 4 <th>s" "4" "$th_count"
     assert_contains "split columns are headered with the real weekday, like cs1101s' own convention" \
-        "$out" "<th style=\"border:1px solid #dddddd;padding:6px 8px;background:#eeeeee;text-align:left;\">Wednesday (Lecture A)</th>"
+        "$out" "<th style=\"border:1px solid #dddddd;padding:6px 8px;background:#eeeeee;text-align:left;vertical-align:top;\">Wednesday (Lecture A)</th>"
     assert_contains "unreleased slot renders as a grey <span>, not a link" "$out" "<span style=\"color:#888888;\">View</span>"
     assert_not_contains "unreleased slot has no <a> for itself" \
         "$out" 'href="https://example.org/pdfs/lecture-L1B'
@@ -200,7 +200,7 @@ EOF
     # to confirm the highlight lands on THAT week specifically, not just
     # somewhere in the table.
     local week2_row
-    week2_row="$(echo "$out" | grep '>2</td>')"
+    week2_row="$(echo "$out" | grep '>2 &#128205;')"
     assert_contains "current-week: week 2's own row has the highlight" "$week2_row" "#ffeeee"
     local week1_row
     week1_row="$(echo "$out" | grep '>1</td>')"
@@ -226,6 +226,94 @@ EOF
         /dev/null /dev/null https://x /dev/null /dev/null)"
     assert_not_contains "no palette: no border-left accent appears anywhere" "$out" "border-left"
     assert_not_contains "no palette: no #ffeeee/current-week color appears" "$out" "#ffeeee"
+
+    # "This week" marker: gated on the SAME opt-in (current_bg or
+    # current_border set) as the rest of current-week highlighting --
+    # the earlier hl_palette call (current_bg/current_border both set)
+    # must show it on week 2's row, and NOT on any other week's.
+    assert_contains "current-week: week 2 gets the This week marker" \
+        "$week2_row" "This week"
+    assert_not_contains "current-week: week 1 gets no This week marker" \
+        "$week1_row" "This week"
+    assert_not_contains "current-week: week 4 gets no This week marker" \
+        "$week4_row" "This week"
+
+    # CAL_CURRENT_WEEK_BG (12th palette field) vs CAL_CURRENT_BG (7th):
+    # distinct shades for the week-number cell vs the data cells when
+    # both are set; the week-number cell falls back to CAL_CURRENT_BG
+    # when CAL_CURRENT_WEEK_BG is left unset (today's exact single-shade
+    # behavior for any pre-existing consumer that only ever set field 7).
+    local wk_palette='||||||#ffeeee|#ff0000||||#ffcccc'
+    out="$(render_html_calendar "$kinds" 2026-08-10 4 0 /dev/null /dev/null \
+        /dev/null /dev/null https://x /dev/null /dev/null "$wk_palette" 2026-08-20)"
+    local week2_row_wk
+    week2_row_wk="$(echo "$out" | grep '>2 &#128205;')"
+    assert_contains "CAL_CURRENT_WEEK_BG: week cell gets the distinct shade" \
+        "$week2_row_wk" "background:#ffcccc;"
+    assert_contains "CAL_CURRENT_WEEK_BG: data cells still get the plain current_bg" \
+        "$week2_row_wk" "background:#ffeeee;"
+
+    out="$(render_html_calendar "$kinds" 2026-08-10 4 0 /dev/null /dev/null \
+        /dev/null /dev/null https://x /dev/null /dev/null "$hl_palette" 2026-08-20)"
+    local week2_row_fallback
+    week2_row_fallback="$(echo "$out" | grep '>2 &#128205;')"
+    assert_contains "CAL_CURRENT_WEEK_BG unset: week cell falls back to current_bg" \
+        "$week2_row_fallback" "background:#ffeeee;"
+
+    # CAL_WEEK_BG (13th field): a distinct week-number-cell background
+    # for NON-current weeks, independent of row banding.
+    local weekbg_palette='||||||||||||#f7f7f7'
+    out="$(render_html_calendar "$kinds" 2026-08-10 2 0 /dev/null /dev/null \
+        /dev/null /dev/null https://x /dev/null /dev/null "$weekbg_palette")"
+    local week1_row_wkbg
+    week1_row_wkbg="$(echo "$out" | grep '>1</td>')"
+    assert_contains "CAL_WEEK_BG: non-current week cell gets the distinct background" \
+        "$week1_row_wkbg" "background:#f7f7f7;"
+
+    # Week-number cell is always right-aligned, and the <table>/<th>
+    # baked-in style fixes are present unconditionally (no flag needed).
+    assert_contains "table gets margin-top:1rem unconditionally" \
+        "$out" "margin-top:1rem;"
+    assert_contains "week-number cell is right-aligned unconditionally" \
+        "$week1_row_wkbg" "text-align:right;"
+
+    # SHOW_WEEK_DATES (22nd param): a date-range sub-line under EVERY
+    # week's number, current or not -- off by default.
+    out="$(render_html_calendar "$kinds" 2026-08-10 2 0 /dev/null /dev/null \
+        /dev/null /dev/null https://x /dev/null /dev/null "" "" "" "" "" "" "" "" "" "" 1)"
+    assert_contains "SHOW_WEEK_DATES: week 1's date range appears" \
+        "$out" "10 Aug &ndash; 14 Aug"
+    out="$(render_html_calendar "$kinds" 2026-08-10 2 0 /dev/null /dev/null \
+        /dev/null /dev/null https://x /dev/null /dev/null)"
+    assert_not_contains "SHOW_WEEK_DATES unset: no date range appears" "$out" "&ndash;"
+
+    # CAL_OCCASION_COLOR (11th field): applied to an occasion label's div.
+    local occ_kinds="$scratch/occ-color-kinds.conf"
+    printf 'lecture|Lecture|wed|-|L{n}|view,print|1|4|2\n' > "$occ_kinds"
+    local occ_color_labels="$scratch/occ-color-labels.conf"
+    printf '2|lecture|Reading Assessment 1\n' > "$occ_color_labels"
+    local occ_color_palette='||||||||||#b34000'
+    out="$(render_html_calendar "$occ_kinds" 2026-08-10 2 0 /dev/null /dev/null \
+        "$occ_color_labels" /dev/null https://x /dev/null /dev/null "$occ_color_palette")"
+    assert_contains "CAL_OCCASION_COLOR: occasion label gets the color" \
+        "$out" "font-weight:600;color:#b34000;"
+    out="$(render_html_calendar "$occ_kinds" 2026-08-10 2 0 /dev/null /dev/null \
+        "$occ_color_labels" /dev/null https://x /dev/null /dev/null)"
+    assert_not_contains "CAL_OCCASION_COLOR unset: no color on the occasion label" \
+        "$out" "font-weight:600;color:"
+
+    # SPECIAL_DATES_FILE/KEY_EVENTS_FILE (20th/21st params): merged into
+    # the Notes column alongside the maintainer note and holiday notes,
+    # mirroring render_markdown_calendar's own equivalent params.
+    local sd_file="$scratch/special-dates.conf" ke_file="$scratch/key-events.conf"
+    printf '2026-08-12|Add/Drop Period Ends\n' > "$sd_file"
+    printf '2026-08-13|09:00|11:00|Orientation\n' > "$ke_file"
+    out="$(render_html_calendar "$kinds" 2026-08-10 1 0 /dev/null /dev/null \
+        /dev/null /dev/null https://x /dev/null /dev/null "" "" "" "" "" "" "" "" \
+        "$sd_file" "$ke_file")"
+    assert_contains "SPECIAL_DATES_FILE: special date shows in Notes" \
+        "$out" "Add/Drop Period Ends"
+    assert_contains "KEY_EVENTS_FILE: key event shows in Notes" "$out" "Orientation"
 
     # Extra link (Recording-style): _html_variant_links directly.
     local links

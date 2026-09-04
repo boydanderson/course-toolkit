@@ -76,6 +76,21 @@ test_cli() {
     assert_contains "course.mk's CALENDAR_ROW_ODD_BG reaches cli canvas" \
         "$banded_canvas_out" "background:#f0f0f0;"
 
+    # CALENDAR_WEEK_BG (13th palette field) and CALENDAR_SHOW_WEEK_DATES
+    # -- both deterministic (unlike current-week fields), prove the full
+    # get_course_var -> cmd_canvas wiring for Stage 14's new mechanisms.
+    printf '\nCALENDAR_WEEK_BG = #f7f7f7\nCALENDAR_SHOW_WEEK_DATES = 1\n' \
+        >> "$scratch/config/course.mk"
+    local weekbg_canvas_out
+    weekbg_canvas_out="$(COURSE_ROOT="$scratch" TOOLKIT_DIR="$TOOLKIT_DIR" \
+        SESSION_KINDS_FILE="$scratch/config/session-kinds.conf" \
+        CONTENT_MAP_FILE="$scratch/config/content-map.conf" \
+        "$cli" canvas)"
+    assert_contains "course.mk's CALENDAR_WEEK_BG reaches cli canvas" \
+        "$weekbg_canvas_out" "background:#f7f7f7;"
+    assert_contains "course.mk's CALENDAR_SHOW_WEEK_DATES reaches cli canvas" \
+        "$weekbg_canvas_out" "&ndash;"
+
     # Key Events / Resources: optional, config-driven, absent from
     # readme_out/canvas_out above since this scratch course has none of
     # the three files -- proves the feature is opt-in, not just that it

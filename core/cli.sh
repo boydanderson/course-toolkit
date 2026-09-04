@@ -115,15 +115,22 @@
 #   CALENDAR_BORDER_COLOR, CALENDAR_HEADER_BG, CALENDAR_LINK_COLOR,
 #   CALENDAR_PENDING_COLOR, CALENDAR_CANCELLED_COLOR, CALENDAR_NOTES_COLOR,
 #   CALENDAR_CURRENT_BG, CALENDAR_CURRENT_BORDER_COLOR,
-#   CALENDAR_ROW_ODD_BG, CALENDAR_ROW_EVEN_BG
+#   CALENDAR_ROW_ODD_BG, CALENDAR_ROW_EVEN_BG, CALENDAR_OCCASION_COLOR,
+#   CALENDAR_CURRENT_WEEK_BG, CALENDAR_WEEK_BG
 #                          `canvas`'s colors -- all optional, each falls
 #                          back to render-html.sh's own default if unset
-#                          (CALENDAR_LINK_COLOR and the four current-week/
-#                          row-banding keys all default to "", meaning
+#                          (CALENDAR_LINK_COLOR and every key past
+#                          CALENDAR_NOTES_COLOR all default to "", meaning
 #                          "no override" -- a course gets no current-week
-#                          highlight or row banding unless it sets at
-#                          least one of those keys). See README's
-#                          "Customizing the calendar's colors".
+#                          highlight, row banding, occasion color, or
+#                          distinct week-cell background unless it sets
+#                          at least one of those keys;
+#                          CALENDAR_CURRENT_WEEK_BG itself further falls
+#                          back to CALENDAR_CURRENT_BG when unset). See
+#                          README's "Customizing the calendar's colors".
+#   CALENDAR_SHOW_WEEK_DATES  any non-empty value -> `canvas` shows a
+#                          date-range sub-line under every week's number
+#                          (e.g. "10 Aug – 14 Aug"). Unset/empty = off.
 set -euo pipefail
 
 CLI_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -173,10 +180,12 @@ PDF_BASE_URL="$(get_course_var PDF_BASE_URL)"
 
 # Each field left blank here falls back to render-html.sh's own default
 # (_calendar_palette) -- a course only overriding one color doesn't need
-# to respecify the rest. The last four (current-week highlight, row
-# banding) default to "" either way -- a course gets neither unless it
-# sets at least one of these keys.
-CALENDAR_PALETTE="$(get_course_var CALENDAR_BORDER_COLOR)|$(get_course_var CALENDAR_HEADER_BG)|$(get_course_var CALENDAR_LINK_COLOR)|$(get_course_var CALENDAR_PENDING_COLOR)|$(get_course_var CALENDAR_CANCELLED_COLOR)|$(get_course_var CALENDAR_NOTES_COLOR)|$(get_course_var CALENDAR_CURRENT_BG)|$(get_course_var CALENDAR_CURRENT_BORDER_COLOR)|$(get_course_var CALENDAR_ROW_ODD_BG)|$(get_course_var CALENDAR_ROW_EVEN_BG)"
+# to respecify the rest. Every field past CALENDAR_NOTES_COLOR defaults
+# to "" either way -- a course gets no current-week highlight, row
+# banding, occasion color, or distinct week-cell background unless it
+# sets at least one of those keys.
+CALENDAR_PALETTE="$(get_course_var CALENDAR_BORDER_COLOR)|$(get_course_var CALENDAR_HEADER_BG)|$(get_course_var CALENDAR_LINK_COLOR)|$(get_course_var CALENDAR_PENDING_COLOR)|$(get_course_var CALENDAR_CANCELLED_COLOR)|$(get_course_var CALENDAR_NOTES_COLOR)|$(get_course_var CALENDAR_CURRENT_BG)|$(get_course_var CALENDAR_CURRENT_BORDER_COLOR)|$(get_course_var CALENDAR_ROW_ODD_BG)|$(get_course_var CALENDAR_ROW_EVEN_BG)|$(get_course_var CALENDAR_OCCASION_COLOR)|$(get_course_var CALENDAR_CURRENT_WEEK_BG)|$(get_course_var CALENDAR_WEEK_BG)"
+CALENDAR_SHOW_WEEK_DATES="$(get_course_var CALENDAR_SHOW_WEEK_DATES)"
 
 _content_map_path() {
     # || true: a scheduled slot with no content-map entry (unauthored,
@@ -262,7 +271,8 @@ cmd_canvas() {
     render_html_calendar "$SESSION_KINDS" "$SEMESTER_START_MONDAY" \
         "$NUM_WEEKS" "$RECESS_AFTER_WEEK" "$titles" "$ALLOWLIST" "$LABELS" "$NOTES" \
         "$PDF_BASE_URL" "$HOLIDAYS" "$EMOJI" "$CALENDAR_PALETTE" "" \
-        "$KIND_EXTRA_LINKS" "$EXTRA_LINKS" "$OCCASION_LINKS" "$GRADED_SLOTS" "$EXTRA_SLOTS" "$EXTRA_NOTE"
+        "$KIND_EXTRA_LINKS" "$EXTRA_LINKS" "$OCCASION_LINKS" "$GRADED_SLOTS" "$EXTRA_SLOTS" "$EXTRA_NOTE" \
+        "$SPECIAL_DATES" "$KEY_EVENTS" "$CALENDAR_SHOW_WEEK_DATES"
     rm -f "$titles"
 
     local key_events

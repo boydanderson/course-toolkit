@@ -5,13 +5,15 @@
 # html.sh (which hardcoded exactly Week/Studio/Wed/Thu/Fri/Notes and a
 # few hundred lines of matching inline CSS).
 #
-# Deliberately NOT attempting full visual parity with that original --
-# styling is a course-specific polish question (brand colors, current-
-# week highlighting, etc.) revisited when cs1101s/course-materials
-# actually migrates onto this toolkit (Stage 4-5's baseline-diff is
-# where such details get reconciled), not something the generic core
-# needs to bake in now. This produces a plain, correctly-structured
-# table: a real starting point, not a finished visual design.
+# Full visual parity with that original was reconciled once
+# cs1101s/course-materials actually migrated onto this toolkit for
+# real: every remaining styling gap (occasion-label color, a distinct
+# current-week week-cell shade + "This week" marker, a week-date
+# sub-line, table/th/week-cell CSS details) became either a new
+# _calendar_palette field (still empty-by-default, so a course that
+# never sets it is completely unaffected) or a small baked-in default
+# fix. Brand colors/current-week highlighting/row banding stay entirely
+# opt-in per course via config/course.mk's CALENDAR_* overrides.
 #
 # NOTE: this whole "gated PDF release table" model is itself only proven
 # to fit courses that actually distribute versioned, allow-listed PDF
@@ -32,21 +34,42 @@ _html_escape() {
     sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g'
 }
 
+# _format_date_short YYYY-MM-DD -> "10 Aug" -- same GNU/BSD `date`
+# branching used throughout this toolkit (e.g. semester-lib.sh), ported
+# verbatim from cs1101s/course-materials' own generate-canvas-html.sh
+# (its local `format_date_short`) for `render_html_calendar`'s
+# SHOW_WEEK_DATES week-date sub-line.
+_format_date_short() {
+    local d="$1"
+    if date -d "$d" '+%d %b' >/dev/null 2>&1; then
+        date -d "$d" '+%d %b'
+    else
+        date -j -f '%Y-%m-%d' "$d" '+%d %b'
+    fi
+}
+
 # _calendar_palette -- the calendar's colors, generic defaults out of
 # the box, overridable per-course via config/course.mk (see cli.sh's
 # CALENDAR_* lookups, and README's "Customizing the calendar's colors").
 # PALETTE field order: border|header_bg|link|pending|cancelled|notes|
-# current_bg|current_border|row_odd_bg|row_even_bg. `link` and the four
-# trailing fields (current-week highlight, row banding) default to ""
-# (no override -- a course gets no current-week highlight and unbanded
-# rows unless it opts in, so omitting the whole palette still reproduces
-# exactly today's output); every other field has a real color default so
-# a course overriding just one doesn't need to respecify the rest.
+# current_bg|current_border|row_odd_bg|row_even_bg|occasion_color|
+# current_week_bg|week_bg. `link` and fields 7-13 (current-week
+# highlight, row banding, occasion color, week-cell backgrounds) default
+# to "" (no override -- a course gets no current-week highlight/banding/
+# occasion color and no distinct week-cell background unless it opts in,
+# so omitting the whole palette still reproduces exactly today's output);
+# every other field has a real color default so a course overriding just
+# one doesn't need to respecify the rest. `current_week_bg` (12th) falls
+# back to `current_bg` (7th) when unset, not to empty -- a course that
+# only ever set `current_bg` (every consumer before this field existed)
+# keeps applying that one shade uniformly to the week cell too, exactly
+# as before; a course that wants the week cell visually distinct from
+# the data cells (e.g. a darker accent) sets `current_week_bg` as well.
 #
 # Every renderer function below takes PALETTE as one opaque trailing
-# string (not ten separate parameters) precisely so a direct unit-test
-# call site (see render-html.test.sh) or an old caller can omit it
-# entirely and get the defaults, and so a new color doesn't mean
+# string (not thirteen separate parameters) precisely so a direct
+# unit-test call site (see render-html.test.sh) or an old caller can
+# omit it entirely and get the defaults, and so a new color doesn't mean
 # touching every function's signature again.
 #
 # Literal defaults, not a second "defaults" array indexed alongside
@@ -71,6 +94,9 @@ _calendar_palette() {
     CAL_CURRENT_BORDER="${p[7]:-}"
     CAL_ROW_ODD_BG="${p[8]:-}"
     CAL_ROW_EVEN_BG="${p[9]:-}"
+    CAL_OCCASION_COLOR="${p[10]:-}"
+    CAL_CURRENT_WEEK_BG="${p[11]:-$CAL_CURRENT_BG}"
+    CAL_WEEK_BG="${p[12]:-}"
 }
 
 # _html_variant_links KIND_ID SLOT_ID VARIANTS BASE_URL RELEASED [PALETTE]
@@ -248,7 +274,9 @@ render_kind_cell_html() {
         occ_label="$(slot_kind_label "$week" "$label_key" "$labels_file")"
     fi
     if [ -n "$occ_label" ] && { [ -z "$suffix_filter" ] || [ -z "$rows" ]; }; then
-        cell_html="<div style=\"font-weight:600;\">$(echo "$occ_label" | _html_escape)</div>"
+        local occ_style="font-weight:600;"
+        [ -n "$CAL_OCCASION_COLOR" ] && occ_style="${occ_style}color:${CAL_OCCASION_COLOR};"
+        cell_html="<div style=\"${occ_style}\">$(echo "$occ_label" | _html_escape)</div>"
         local occ_raw occ_links_html
         occ_raw="$(occasion_links "$week" "$label_key" "$occasion_links_file")"
         if [ -n "$occ_raw" ]; then
@@ -363,7 +391,16 @@ render_kind_cell_html() {
 # enrich-lib.sh's kind_extra_slots. EXTRA_NOTE_FILE (19th, optional,
 # SLOT_ID|HTML) renders one more line under a regular occurrence's
 # title+links -- see render_kind_cell_html's own comment and
-# enrich-lib.sh's extra_note_for_slot.
+# enrich-lib.sh's extra_note_for_slot. SPECIAL_DATES_FILE (20th,
+# optional, DATE|NAME -- same shape as HOLIDAYS_FILE) and
+# KEY_EVENTS_FILE (21st, optional, DATE|START_TIME|END_TIME|NAME) each
+# add their own category to the Notes column, alongside the maintainer
+# note and holiday notes -- mirrors render_markdown_calendar's own
+# equivalent params; see enrich-lib.sh's week_special_date_notes/
+# week_key_event_notes. SHOW_WEEK_DATES (22nd, optional, any non-empty
+# value) appends a "10 Aug – 14 Aug" sub-line under every week's number
+# (every week, not just the current one) -- off by default, so a course
+# that doesn't set it sees no change.
 render_html_calendar() {
     local kinds_conf="$1" start_monday="$2" num_weeks="$3" recess_after="$4"
     local titles_file="$5" allowlist_file="$6" labels_file="$7" notes_file="$8"
@@ -372,6 +409,7 @@ render_html_calendar() {
     local kind_extra_links_file="${14:-}" extra_links_file="${15:-}"
     local occasion_links_file="${16:-}" graded_file="${17:-}"
     local extra_slots_file="${18:-}" extra_note_file="${19:-}"
+    local special_dates_file="${20:-}" key_events_file="${21:-}" show_week_dates="${22:-}"
     [ -z "$today" ] && today="$(sgt_date '+%Y-%m-%d')"
     _calendar_palette "$palette"
 
@@ -383,10 +421,10 @@ render_html_calendar() {
         col_header+=("$ch")
     done < <(kind_columns "$kinds_conf")
 
-    local th_style="border:1px solid ${CAL_BORDER};padding:6px 8px;background:${CAL_HEADER_BG};text-align:left;"
+    local th_style="border:1px solid ${CAL_BORDER};padding:6px 8px;background:${CAL_HEADER_BG};text-align:left;vertical-align:top;"
     local td_style="border:1px solid ${CAL_BORDER};padding:6px 8px;vertical-align:top;"
 
-    echo '<table style="border-collapse:collapse;width:100%;font-size:0.9rem;">'
+    echo '<table style="border-collapse:collapse;width:100%;font-size:0.9rem;margin-top:1rem;">'
     echo '<thead><tr>'
     printf '<th style="%s">Week</th>' "$th_style"
     local i
@@ -438,14 +476,44 @@ render_html_calendar() {
         local row_style="$td_style"
         [ -n "$row_bg" ] && row_style="${td_style}background:${row_bg};"
 
-        local week_style="${td_style}font-weight:bold;"
-        if [ "$is_current" = 1 ] && [ -n "$CAL_CURRENT_BORDER" ]; then
-            week_style="border:1px solid ${CAL_BORDER};border-left:4px solid ${CAL_CURRENT_BORDER};padding:6px 8px;vertical-align:top;font-weight:bold;"
+        # week_bg: the WEEK-NUMBER cell's own background, independent of
+        # row_bg above (the data cells') -- CAL_CURRENT_WEEK_BG already
+        # falls back to CAL_CURRENT_BG in _calendar_palette when unset,
+        # so a course that only ever set CAL_CURRENT_BG keeps applying
+        # that one shade uniformly, unchanged from before this field
+        # existed; CAL_WEEK_BG (non-current weeks) is independent of row
+        # banding, since a banded week-number column reads oddly next to
+        # its own always-distinct week-cell background.
+        local week_bg=""
+        if [ "$is_current" = 1 ] && [ -n "$CAL_CURRENT_WEEK_BG" ]; then
+            week_bg="$CAL_CURRENT_WEEK_BG"
+        elif [ "$is_current" != 1 ] && [ -n "$CAL_WEEK_BG" ]; then
+            week_bg="$CAL_WEEK_BG"
         fi
-        [ -n "$row_bg" ] && week_style="${week_style}background:${row_bg};"
+
+        local week_style="${td_style}text-align:right;font-weight:bold;"
+        if [ "$is_current" = 1 ] && [ -n "$CAL_CURRENT_BORDER" ]; then
+            week_style="border:1px solid ${CAL_BORDER};border-left:4px solid ${CAL_CURRENT_BORDER};padding:6px 8px;text-align:right;vertical-align:top;font-weight:bold;"
+        fi
+        [ -n "$week_bg" ] && week_style="${week_style}background:${week_bg};"
+
+        # "This week" marker: gated on the course having opted into
+        # current-week highlighting at all (CAL_CURRENT_BG or
+        # CAL_CURRENT_BORDER set) -- a course that never sets either
+        # keeps getting the plain week number, unchanged.
+        local week_label="$teaching_week"
+        if [ "$is_current" = 1 ] && { [ -n "$CAL_CURRENT_BG" ] || [ -n "$CAL_CURRENT_BORDER" ]; }; then
+            week_label="${teaching_week} &#128205;<div style=\"font-weight:normal;font-size:0.7rem;color:#99106b;\">This week</div>"
+        fi
+        local week_dates_html=""
+        if [ -n "$show_week_dates" ]; then
+            local week_friday
+            week_friday="$(add_days "$monday" 4)"
+            week_dates_html="<div style=\"font-weight:normal;font-size:0.75rem;color:#666666;\">$(_format_date_short "$monday") &ndash; $(_format_date_short "$week_friday")</div>"
+        fi
 
         echo '<tr>'
-        printf '<td style="%s">%s</td>' "$week_style" "$teaching_week"
+        printf '<td style="%s">%s%s</td>' "$week_style" "$week_label" "$week_dates_html"
         week_occurrences "$kinds_conf" "$monday" "$teaching_week" "$holidays_file" "$start_monday" "$recess_after" > "$occ_file"
         for ((i = 0; i < ${#col_kind[@]}; i++)); do
             local k="${col_kind[$i]}" s="${col_suffix[$i]}"
@@ -454,13 +522,27 @@ render_html_calendar() {
             cell="$(render_kind_cell_html "$teaching_week" "$k" "$occ_file" "$titles_file" "$allowlist_file" "$labels_file" "$base_url" "$holidays_file" "$emoji_file" "$palette" "$extra_label" "$extra_links_file" "$occasion_links_file" "$s" "$graded_file" "$extra_slots_file" "$extra_note_file")"
             printf '<td style="%s">%s</td>' "$row_style" "$cell"
         done
-        local note maintainer_note holiday_note
+        local -a note_parts=()
+        local maintainer_note holiday_note special_note key_event_note
         maintainer_note="$(week_note "$teaching_week" "$notes_file")"
+        [ -n "$maintainer_note" ] && note_parts+=("$maintainer_note")
         holiday_note="$(week_holiday_notes "$monday" "$holidays_file" "$emoji_file")"
-        if [ -n "$maintainer_note" ] && [ -n "$holiday_note" ]; then
-            note="${maintainer_note}; ${holiday_note}"
-        else
-            note="${maintainer_note}${holiday_note}"
+        [ -n "$holiday_note" ] && note_parts+=("$holiday_note")
+        if [ -n "$special_dates_file" ]; then
+            special_note="$(week_special_date_notes "$monday" "$special_dates_file")"
+            [ -n "$special_note" ] && note_parts+=("$special_note")
+        fi
+        if [ -n "$key_events_file" ]; then
+            key_event_note="$(week_key_event_notes "$monday" "$key_events_file")"
+            [ -n "$key_event_note" ] && note_parts+=("$key_event_note")
+        fi
+        local note=""
+        if [ ${#note_parts[@]} -gt 0 ]; then
+            note="${note_parts[0]}"
+            local ni
+            for ((ni = 1; ni < ${#note_parts[@]}; ni++)); do
+                note="${note}; ${note_parts[$ni]}"
+            done
         fi
         [ -z "$note" ] && note="-"
         printf '<td style="%sfont-size:0.85rem;color:%s;">%s</td>' "$row_style" "$CAL_NOTES" "$(echo "$note" | _html_escape)"

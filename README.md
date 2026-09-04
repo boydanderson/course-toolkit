@@ -182,9 +182,13 @@ actually wants to change:
 | `CALENDAR_PENDING_COLOR` | an unreleased item's text | `#888888` |
 | `CALENDAR_CANCELLED_COLOR` | a holiday-cancelled occurrence's text | `#c0392b` |
 | `CALENDAR_NOTES_COLOR` | the Notes column's text | `#555555` |
-| `CALENDAR_CURRENT_BG` | the current teaching week's row background | *(unset — no highlight)* |
+| `CALENDAR_CURRENT_BG` | the current teaching week's row background (data cells) | *(unset — no highlight)* |
 | `CALENDAR_CURRENT_BORDER_COLOR` | the current week's number-cell left-accent border | *(unset — no accent)* |
 | `CALENDAR_ROW_ODD_BG` / `CALENDAR_ROW_EVEN_BG` | alternating row backgrounds | *(unset — no banding)* |
+| `CALENDAR_OCCASION_COLOR` | an occasion label's (e.g. an assessment replacing a slot) text | *(unset — no color)* |
+| `CALENDAR_CURRENT_WEEK_BG` | the current week's own number-cell background, distinct from `CALENDAR_CURRENT_BG`'s data cells | *(unset — falls back to `CALENDAR_CURRENT_BG`)* |
+| `CALENDAR_WEEK_BG` | every (non-current) week's number-cell background | *(unset — no distinct background)* |
+| `CALENDAR_SHOW_WEEK_DATES` | any non-empty value shows a "10 Aug – 14 Aug" date-range sub-line under every week's number | *(unset — no date sub-line)* |
 
 ```
 CALENDAR_BORDER_COLOR = #dddddd
@@ -195,8 +199,12 @@ Only `cli canvas` (the HTML/Canvas renderer) has this concept. `cli
 readme`'s output is plain Markdown — a table meant to render correctly
 wherever Markdown is read (GitHub, a plain-text viewer, ...), so it
 carries no inline styling to make configurable in the first place. The
-current-week/row-banding colors are likewise HTML-only for the same
-reason.
+current-week/row-banding/occasion-color/week-date colors are likewise
+HTML-only for the same reason. Independent of any of these colors, the
+current week's number cell always also gets a "📍 This week" sub-label
+whenever `CALENDAR_CURRENT_BG` or `CALENDAR_CURRENT_BORDER_COLOR` is
+set — not itself configurable, since it's tied to opting into
+current-week highlighting at all, not a separate color choice.
 
 ### Optional presentation features
 
@@ -209,15 +217,16 @@ existing course's output is completely unaffected by their existence:
   `config/key-events.conf`, format `DATE|START_TIME|END_TIME|NAME`, one
   per line. `cli readme`/`cli canvas` append it after the main calendar
   table automatically if the file exists and has real rows.
-- **Extra Notes-column categories** (`cli readme` only) — besides real
-  holidays (`week_holiday_notes`, always on if `HOLIDAYS_FILE` is set),
-  the weekly Notes column can also surface a non-holiday calendar marker
-  (`config/special-dates.conf`, format `DATE|NAME`) and the same one-off
-  events `config/key-events.conf` already lists for the Key Events table
-  above — a course populating that file for the table gets its events in
-  the weekly Notes column too, at no extra config cost. All categories
-  append in a fixed order (maintainer note, holidays, special dates, key
-  events), not interleaved by day. See `core/enrich-lib.sh`'s
+- **Extra Notes-column categories** (`cli readme` and `cli canvas` both)
+  — besides real holidays (`week_holiday_notes`, always on if
+  `HOLIDAYS_FILE` is set), the weekly Notes column can also surface a
+  non-holiday calendar marker (`config/special-dates.conf`, format
+  `DATE|NAME`) and the same one-off events `config/key-events.conf`
+  already lists for the Key Events table above — a course populating
+  that file for the table gets its events in the weekly Notes column
+  too, at no extra config cost. All categories append in a fixed order
+  (maintainer note, holidays, special dates, key events), not
+  interleaved by day. See `core/enrich-lib.sh`'s
   `week_special_date_notes`/`week_key_event_notes`.
 - **Source-repo links instead of built-PDF links** (`cli readme` only)
   — a course whose calendar table should link straight at its own
