@@ -364,6 +364,18 @@ scheduled slots, `backend_build_slot`/`backend_content_hash`/
 tables — see each function's own header comment for its full argument
 list, or read `cli.sh` itself for a complete worked example.
 
+A course's own regeneration script (a README/file-list builder, say)
+usually still needs to splice that generated content into a
+hand-maintained file between two marker lines (e.g.
+`<!-- CALENDAR_START -->` ... `<!-- CALENDAR_END -->`) rather than
+overwrite the whole file. `core/splice-lib.sh`'s `splice_markers FILE
+START_MARKER END_MARKER CONTENT_FILE` does this in place: it requires
+`FILE` to already contain a line with `START_MARKER` (a clear error
+naming both markers otherwise), replaces everything between the
+marker lines with `CONTENT_FILE`'s content, and leaves both marker
+lines themselves untouched — safe to call on every regeneration run,
+not just the first.
+
 ## Renderer backend contract
 
 A backend at `backends/<name>/` implements three executable scripts:
