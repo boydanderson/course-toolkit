@@ -118,6 +118,24 @@
 #                 text. A week listed here where nothing actually
 #                 collides (config drift -- e.g. a holiday later moves)
 #                 is a silent no-op, not an error.
+#   CONTENT_LIST_FILE optional 14th field (omit entirely, or "-"): a
+#                 path to a file listing content identifiers in
+#                 curriculum order, one per line (e.g. real lecture
+#                 numbers "1"/"2"/"3"/.../"23" -- a gap like a retired
+#                 lecture number simply never appears in the list, a
+#                 curriculum decision the list fully captures). Unlike
+#                 {count}, which conflates a slot's own name with its
+#                 placement index, this keeps SLOT_ID exactly what
+#                 SLOT_PATTERN says (still week-derived, e.g. `L4A`) --
+#                 only the *content* placed there shifts. Each active,
+#                 non-holiday-colliding week consumes the next unused
+#                 line from this file (merged across every row sharing
+#                 KIND_ID, same (week, file-row-order) sequence {count}
+#                 already uses), returned as week_occurrences' own
+#                 CONTENT_REF output column -- see content_ref_count and
+#                 week_occurrences' own comments for the full mechanism,
+#                 including why this needs its own holiday check
+#                 distinct from AUTO_SHIFT_ON_HOLIDAY's.
 #
 # Comment lines (leading #) and blank lines are ignored, same convention
 # as every other .conf file in this ecosystem.
@@ -235,9 +253,9 @@ _row_holiday_shift_skip() {
 occurrence_count() {
     local conf_file="$1" kind_id="$2" target_week="$3" target_weekday="$4" target_suffix="$5"
     local holidays_file="${6:-}" start_monday="${7:-}" recess_after_week="${8:-}"
-    local k l w s sp v ws we ew dl cew ashw hcw week count=0
+    local k l w s sp v ws we ew dl cew ashw hcw clf week count=0
     for ((week = 1; week <= target_week; week++)); do
-        while IFS='|' read -r k l w s sp v ws we ew dl cew ashw hcw; do
+        while IFS='|' read -r k l w s sp v ws we ew dl cew ashw hcw clf; do
             [ -z "$k" ] && continue
             case "$k" in \#*) continue ;; esac
             [ "$k" = "$kind_id" ] || continue
@@ -266,11 +284,92 @@ occurrence_count() {
     echo "$count"
 }
 
+# content_ref_count CONF_FILE KIND_ID TARGET_WEEK TARGET_WEEKDAY
+# TARGET_SUFFIX [HOLIDAYS_FILE] [START_MONDAY] [RECESS_AFTER_WEEK] -> the
+# content-list line (from the target row's own CONTENT_LIST_FILE, 14th
+# field) that the (TARGET_WEEK, TARGET_WEEKDAY, TARGET_SUFFIX) occurrence
+# of KIND_ID resolves to, success (0); failure (1) with no output if that
+# occurrence's own week is holiday-colliding (see below) or past the
+# target row's own WEEK_START/WEEK_END/EXCLUDE_WEEKS eligibility. Same
+# re-scan-from-week-1, same merge-across-every-row-sharing-KIND_ID as
+# occurrence_count -- only rows with CONTENT_LIST_FILE set participate in
+# the count at all (a kind can mix CONTENT_LIST_FILE rows with plain
+# {n}/{count} rows sharing the same KIND_ID, though in practice a course
+# declares one or the other per kind, not both).
+#
+# The holiday check here is deliberately its own, not a reuse of
+# AUTO_SHIFT_ON_HOLIDAY's: that field's whole point is suppressing the
+# ROW itself so {count} shifts everything downstream by a whole slot;
+# CONTENT_LIST_FILE's slot names stay week-derived (e.g. L4A) and must
+# keep meaning "week 4's Friday slot" regardless of what's playing there,
+# so the ROW still has to emit normally (occurrence_holiday's own
+# render-time check independently renders it cancelled) -- only the
+# CONTENT-INDEX advance skips, so the content that would have landed on
+# the colliding week rolls to the next eligible one instead. Confirmed
+# for real: a mid-semester holiday landing on one of two weekly
+# occurrences (e.g. lecture's Friday slot) must NOT consume a content-list
+# line that week, while its own Wednesday sibling that same week still
+# does -- re-derived by hand against cs1101s/course-materials' own real
+# 20-lecture schedule (including its own real Friday-holiday collision)
+# before this was written, reproducing every one of its real rows exactly.
+content_ref_count() {
+    local conf_file="$1" kind_id="$2" target_week="$3" target_weekday="$4" target_suffix="$5"
+    local holidays_file="${6:-}" start_monday="${7:-}" recess_after_week="${8:-}"
+    local k l w s sp v ws we ew dl cew ashw hcw clf week content_index=0
+    for ((week = 1; week <= target_week; week++)); do
+        while IFS='|' read -r k l w s sp v ws we ew dl cew ashw hcw clf; do
+            [ -z "$k" ] && continue
+            case "$k" in \#*) continue ;; esac
+            [ "$k" = "$kind_id" ] || continue
+            if [ -z "$clf" ] || [ "$clf" = "-" ]; then continue; fi
+            if [ "$week" -lt "$ws" ] || [ "$week" -gt "$we" ]; then continue; fi
+            if [ -n "$ew" ] && [ "$ew" != "-" ]; then
+                case ",${ew}," in *",${week},"*) continue ;; esac
+            fi
+            local is_holiday_week=0
+            if [ -n "$holidays_file" ] && [ -n "$start_monday" ]; then
+                local this_week_monday
+                this_week_monday="$(semester_weeks "$start_monday" "$week" "$recess_after_week" | tail -1 | cut -d'|' -f2)"
+                _row_holiday_shift_skip "$this_week_monday" "$w" "$cew" "$holidays_file" && is_holiday_week=1
+            fi
+            if [ "$is_holiday_week" -eq 1 ]; then
+                if [ "$week" -eq "$target_week" ] && [ "$w" = "$target_weekday" ] && [ "$s" = "$target_suffix" ]; then
+                    return 1
+                fi
+                continue
+            fi
+            content_index=$((content_index + 1))
+            if [ "$week" -eq "$target_week" ] && [ "$w" = "$target_weekday" ] && [ "$s" = "$target_suffix" ]; then
+                local ref
+                ref="$(sed -n "${content_index}p" "$clf")"
+                [ -z "$ref" ] && return 1
+                echo "$ref"
+                return 0
+            fi
+        done < <(grep -vE '^\s*#|^\s*$' "$conf_file")
+    done
+    return 1
+}
+
 # week_occurrences CONF_FILE WEEK_MONDAY TEACHING_WEEK [HOLIDAYS_FILE]
 # [START_MONDAY] [RECESS_AFTER_WEEK] -> one line per active occurrence
 # for that teaching week, in CONF_FILE's own row order:
 #
-#   KIND_ID|LABEL|SLOT_ID|DATE|WEEKDAY|SUFFIX|VARIANTS|CANCEL_EXTRA_DATES|CONFLICT_HOLIDAY
+#   KIND_ID|LABEL|SLOT_ID|DATE|WEEKDAY|SUFFIX|VARIANTS|CANCEL_EXTRA_DATES|CONFLICT_HOLIDAY|CONTENT_REF
+#
+# CONTENT_REF (empty unless the row's own CONTENT_LIST_FILE, 14th field,
+# is set) is the content-list line this occurrence resolves to (e.g. a
+# real lecture number) -- SLOT_ID itself is completely unaffected, still
+# computed from SLOT_PATTERN as normal, so a week-derived slot name
+# (e.g. L4A) keeps meaning "week 4's Friday slot" regardless of which
+# content is playing there. Empty when this occurrence's own week is
+# holiday-colliding (content_ref_count's own check, independent of
+# AUTO_SHIFT_ON_HOLIDAY -- see that function's comment) or past the end
+# of CONTENT_LIST_FILE (more eligible weeks than content, the normal
+# "not authored that far yet" case) -- either way the row still emits
+# normally; a caller looks up CONTENT_REF to resolve the real title/
+# source path, and an empty CONTENT_REF just means no title is found,
+# same as any other not-yet-authored slot.
 #
 # HOLIDAYS_FILE/START_MONDAY/RECESS_AFTER_WEEK (all optional, needed
 # together) enable a row's optional 12th field, AUTO_SHIFT_ON_HOLIDAY
@@ -332,9 +431,9 @@ occurrence_count() {
 week_occurrences() {
     local conf_file="$1" week_monday="$2" teaching_week="$3"
     local holidays_file="${4:-}" start_monday="${5:-}" recess_after_week="${6:-}"
-    local line kind_id label weekday suffix slot_pattern variants week_start week_end exclude_weeks day_label cancel_extra_weekdays auto_shift_on_holiday holiday_conflict_weeks
-    local date slot_id count cancel_extra_dates conflict_holiday is_conflict_week
-    while IFS='|' read -r kind_id label weekday suffix slot_pattern variants week_start week_end exclude_weeks day_label cancel_extra_weekdays auto_shift_on_holiday holiday_conflict_weeks; do
+    local line kind_id label weekday suffix slot_pattern variants week_start week_end exclude_weeks day_label cancel_extra_weekdays auto_shift_on_holiday holiday_conflict_weeks content_list_file
+    local date slot_id count cancel_extra_dates conflict_holiday is_conflict_week content_ref
+    while IFS='|' read -r kind_id label weekday suffix slot_pattern variants week_start week_end exclude_weeks day_label cancel_extra_weekdays auto_shift_on_holiday holiday_conflict_weeks content_list_file; do
         [ -z "$kind_id" ] && continue
         case "$kind_id" in \#*) continue ;; esac
         if [ -n "$auto_shift_on_holiday" ] && [ "$auto_shift_on_holiday" != "-" ]; then
@@ -374,6 +473,10 @@ week_occurrences() {
             *'{count}'*) count="$(occurrence_count "$conf_file" "$kind_id" "$teaching_week" "$weekday" "$suffix" "$holidays_file" "$start_monday" "$recess_after_week")" ;;
         esac
         slot_id="$(format_slot_id "$slot_pattern" "$teaching_week" "$suffix" "$count")"
+        content_ref=""
+        if [ -n "$content_list_file" ] && [ "$content_list_file" != "-" ]; then
+            content_ref="$(content_ref_count "$conf_file" "$kind_id" "$teaching_week" "$weekday" "$suffix" "$holidays_file" "$start_monday" "$recess_after_week")" || true
+        fi
         cancel_extra_dates=""
         if [ -n "$cancel_extra_weekdays" ] && [ "$cancel_extra_weekdays" != "-" ]; then
             local extra_wd extra_date
@@ -404,8 +507,8 @@ week_occurrences() {
                 IFS="$IFS_SAVE2"
             fi
         fi
-        printf '%s|%s|%s|%s|%s|%s|%s|%s|%s\n' \
-            "$kind_id" "$label" "$slot_id" "$date" "$weekday" "$suffix" "$variants" "$cancel_extra_dates" "$conflict_holiday"
+        printf '%s|%s|%s|%s|%s|%s|%s|%s|%s|%s\n' \
+            "$kind_id" "$label" "$slot_id" "$date" "$weekday" "$suffix" "$variants" "$cancel_extra_dates" "$conflict_holiday" "$content_ref"
     done < <(grep -vE '^\s*#|^\s*$' "$conf_file")
 }
 
@@ -477,9 +580,9 @@ weekday_full_name() {
 # field, empty if that row didn't set one.
 kind_suffixes() {
     local conf_file="$1" kind_id="$2"
-    local k l w s sp v ws we ew dl cew ashw hcw
+    local k l w s sp v ws we ew dl cew ashw hcw clf
     local seen=""
-    while IFS='|' read -r k l w s sp v ws we ew dl cew ashw hcw; do
+    while IFS='|' read -r k l w s sp v ws we ew dl cew ashw hcw clf; do
         [ -z "$k" ] && continue
         case "$k" in \#*) continue ;; esac
         [ "$k" = "$kind_id" ] || continue

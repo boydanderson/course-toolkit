@@ -83,7 +83,7 @@ studio|B|Thu-Fri (Studio B)" "$out"
     } > "$dlx_conf"
     out="$(week_occurrences "$dlx_conf" 2026-08-10 3)"
     assert_eq "DAY_LABEL doesn't break EXCLUDE_WEEKS: week 3's mon row is excluded, only thu's Studio5 remains" \
-        "studio|Studio|Studio5|2026-08-13|thu|B|instructor,student||" "$out"
+        "studio|Studio|Studio5|2026-08-13|thu|B|instructor,student|||" "$out"
     out="$(week_occurrences "$dlx_conf" 2026-08-10 4 | head -1 | cut -d'|' -f3)"
     assert_eq "DAY_LABEL doesn't break {count}: week 4 mon is Studio6, no gap/shift from the exclusion" \
         "Studio6" "$out"
@@ -385,6 +385,76 @@ studio|B|Thu-Fri (Studio B)" "$out"
     rm -f "$hcw_multirow_conf"
 
     rm -f "$hcw_conf" "$hcw_holidays"
+
+    # CONTENT_LIST_FILE (14th field): keeps SLOT_ID week-derived (L{n}A/
+    # L{n}B, NOT {count}) while the CONTENT placed there shifts past a
+    # holiday collision -- re-derives, at small scale, the exact real
+    # shape that motivated this (cs1101s/course-materials' real lecture
+    # schedule: 2 rows/week sharing one merged content sequence, a real
+    # holiday landing on only ONE of the two weekly occurrences). 3
+    # weeks x 2 rows (wed/A, fri/B), a holiday on week 2's Friday only.
+    local clf_conf clf_content clf_holidays
+    clf_conf="$(mktemp)"
+    clf_content="$(mktemp)"
+    clf_holidays="$(mktemp)"
+    {
+        printf 'lecture|Lecture|wed|A|L{n}{suffix}|view,print|1|3|-|-|-|-|-|%s\n' "$clf_content"
+        printf 'lecture|Lecture|fri|B|L{n}{suffix}|view,print|1|3|-|-|-|-|-|%s\n' "$clf_content"
+    } > "$clf_conf"
+    printf '1\n2\n3\n4\n5\n6\n' > "$clf_content"
+    printf '2026-08-21|Test Holiday\n' > "$clf_holidays"
+
+    out="$(week_occurrences "$clf_conf" 2026-08-10 1 "$clf_holidays" 2026-08-10 0)"
+    assert_eq "CONTENT_LIST_FILE: week 1 A (clean) gets content_ref 1" \
+        "1" "$(echo "$out" | head -1 | cut -d'|' -f10)"
+    assert_eq "CONTENT_LIST_FILE: week 1 B (clean) gets content_ref 2" \
+        "2" "$(echo "$out" | tail -1 | cut -d'|' -f10)"
+
+    out="$(week_occurrences "$clf_conf" 2026-08-17 2 "$clf_holidays" 2026-08-10 0)"
+    local week2_a week2_b
+    week2_a="$(echo "$out" | head -1)"
+    week2_b="$(echo "$out" | tail -1)"
+    assert_contains "CONTENT_LIST_FILE: week 2 A's slot still emits normally" "$week2_a" "L2A|"
+    assert_eq "CONTENT_LIST_FILE: week 2 A (clean) gets content_ref 3" \
+        "3" "$(echo "$week2_a" | cut -d'|' -f10)"
+    assert_contains "CONTENT_LIST_FILE: week 2 B's slot STILL emits (not suppressed like AUTO_SHIFT_ON_HOLIDAY)" \
+        "$week2_b" "L2B|"
+    assert_eq "CONTENT_LIST_FILE: week 2 B (holiday-colliding) gets NO content_ref" \
+        "" "$(echo "$week2_b" | cut -d'|' -f10)"
+
+    out="$(week_occurrences "$clf_conf" 2026-08-24 3 "$clf_holidays" 2026-08-10 0)"
+    assert_eq "CONTENT_LIST_FILE: week 3 A picks up content_ref 4 (dense, not shifted by the skip)" \
+        "4" "$(echo "$out" | head -1 | cut -d'|' -f10)"
+    assert_eq "CONTENT_LIST_FILE: week 3 B picks up content_ref 5 (the item week 2 B's collision skipped)" \
+        "5" "$(echo "$out" | tail -1 | cut -d'|' -f10)"
+
+    # Backward compat: a row WITHOUT CONTENT_LIST_FILE set is completely
+    # unaffected -- the 10th field is just empty, unchanged from before
+    # this existed.
+    local noclf_conf
+    noclf_conf="$(mktemp)"
+    printf 'lecture|Lecture|wed|A|L{n}{suffix}|view,print|1|3|-\n' > "$noclf_conf"
+    out="$(week_occurrences "$noclf_conf" 2026-08-10 1)"
+    assert_eq "CONTENT_LIST_FILE unset: 10th field is empty" "" "$(echo "$out" | cut -d'|' -f10)"
+    rm -f "$noclf_conf"
+
+    # content_ref_count directly: a week past the content list's own end
+    # (more eligible weeks than content -- the opposite of a shortfall)
+    # is a clean "nothing here yet", not an error.
+    local clf_short_content
+    clf_short_content="$(mktemp)"
+    printf '1\n' > "$clf_short_content"
+    local clf_short_conf
+    clf_short_conf="$(mktemp)"
+    printf 'lecture|Lecture|wed|A|L{n}{suffix}|view,print|1|3|-|-|-|-|-|%s\n' "$clf_short_content" > "$clf_short_conf"
+    assert_failure "content_ref_count: past the content list's own end fails cleanly" \
+        content_ref_count "$clf_short_conf" lecture 2 wed A
+    out="$(week_occurrences "$clf_short_conf" 2026-08-17 2)"
+    assert_eq "CONTENT_LIST_FILE: past the list's end, CONTENT_REF is empty (not an error)" \
+        "" "$(echo "$out" | cut -d'|' -f10)"
+    rm -f "$clf_short_content" "$clf_short_conf"
+
+    rm -f "$clf_conf" "$clf_content" "$clf_holidays"
 
     # {count}: flat sequential numbering across occurrences, not
     # week-derived -- e.g. 2 labs/week (mon/A, thu/B) numbered Lab1..LabN

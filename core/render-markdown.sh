@@ -325,7 +325,7 @@ render_kind_cell() {
     if [ ${#extra_slot_ids[@]} -eq 0 ]; then
         # No extra slots for this week+kind -- today's exact behavior,
         # completely unchanged.
-        while IFS='|' read -r rkind rlabel rslot rdate rweekday rsuffix rvariants rcancel_extra rconflict; do
+        while IFS='|' read -r rkind rlabel rslot rdate rweekday rsuffix rvariants rcancel_extra rconflict rcontent_ref; do
             [ -z "$rkind" ] && continue
             if [ -n "$rconflict" ]; then
                 local tl title links
@@ -359,7 +359,7 @@ render_kind_cell() {
         # via _md_group_add instead of always adding a separate entry.
         _MD_GROUP_TITLE=() _MD_GROUP_ENTRY=() _MD_GROUP_SLOT=() _MD_GROUP_COUNT=()
         local primary_variants=""
-        while IFS='|' read -r rkind rlabel rslot rdate rweekday rsuffix rvariants rcancel_extra rconflict; do
+        while IFS='|' read -r rkind rlabel rslot rdate rweekday rsuffix rvariants rcancel_extra rconflict rcontent_ref; do
             [ -z "$rkind" ] && continue
             primary_variants="$rvariants"
             if [ -n "$rconflict" ]; then

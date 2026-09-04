@@ -299,7 +299,7 @@ render_kind_cell_html() {
 
     local cancelled_style="font-weight:600;color:${CAL_CANCELLED};"
     local primary_variants="" any_cancelled=0
-    while IFS='|' read -r rkind rlabel rslot rdate rweekday rsuffix rvariants rcancel_extra rconflict; do
+    while IFS='|' read -r rkind rlabel rslot rdate rweekday rsuffix rvariants rcancel_extra rconflict rcontent_ref; do
         [ -z "$rkind" ] && continue
         primary_variants="$rvariants"
         if [ -n "$rconflict" ]; then

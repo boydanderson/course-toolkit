@@ -69,6 +69,7 @@ for every renderer-specific step.
   | `CANCEL_EXTRA_WEEKDAYS` | optional 11th field (omit entirely, or `-`): comma-separated weekday names (e.g. `tue`) this same occurrence *also* spans, for a session held across more than one calendar day with the same material (e.g. a studio meeting Monday **and** Tuesday) — a holiday landing on *any* of these days, not just `WEEKDAY`'s own, still cancels the occurrence. Purely a cancellation check: these extra days don't get their own slot ID, column, or `{count}` — it's still exactly one row, one `SLOT_ID` |
   | `AUTO_SHIFT_ON_HOLIDAY` | optional 12th field (omit entirely, or `-`): when set, a holiday-colliding week (same multi-day check `CANCEL_EXTRA_WEEKDAYS` uses) isn't just cancelled for display — the occurrence is skipped entirely at placement time, so the content that would have landed there shifts to the next eligible week instead, cascading the same way an `EXCLUDE_WEEKS` week already does. Requires `{count}` in `SLOT_PATTERN` (a clear error otherwise) — shifting only makes sense for a flat, week-independent numbering; a week-derived slot ID like `L4A` names the week it's shown in by construction, so it isn't a candidate. See "Holiday-aware auto-shift" below |
   | `HOLIDAY_CONFLICT_WEEKS` | optional 13th field (omit entirely, or `-`): comma-separated week numbers where a holiday collision is already known and deliberately accepted (e.g. the real course already runs a take-home activity that week) — the occurrence is held in place instead of shifted/cancelled. See "Conflict-in-place" below |
+  | `CONTENT_LIST_FILE` | optional 14th field (omit entirely, or `-`): a path to a file listing content identifiers in curriculum order, one per line — the *content* placed in this occurrence shifts past a holiday collision while `SLOT_ID` stays exactly what `SLOT_PATTERN` says (still week-derived, e.g. `L4A`). See "Computed content placement" below |
 
   This is what makes "2 lectures a week" vs. "1 lecture + 1 recitation +
   1 lab a week" — and a real course's irregular exceptions — expressible
@@ -151,6 +152,33 @@ for every renderer-specific step.
   already runs a single take-home activity there, and
   `HOLIDAY_CONFLICT_WEEKS` lets the schedule reflect that directly
   instead of cascading everything after it and running out of room.
+
+  **Computed content placement**: `CONTENT_LIST_FILE` solves a
+  different problem from `AUTO_SHIFT_ON_HOLIDAY` -- some kinds have a
+  slot ID that's *already* a stable, independent identity (e.g. a
+  lecture numbered 1-23 in curriculum order, authored well before
+  anyone picks a semester start date) that only gets a week-derived
+  display name (`L4A`) once actually scheduled. `{count}` can't express
+  this: it conflates the slot's name and its placement index into one
+  value, so shifting content forward means renaming the slot too --
+  wrong for a slot name that real hosting URLs/allow-lists already key
+  off. `CONTENT_LIST_FILE` keeps `SLOT_ID` exactly what `SLOT_PATTERN`
+  says (still `{n}`-based, still names the week it's shown in) while a
+  *separate* index -- which content-list line this occurrence resolves
+  to -- shifts past a holiday collision instead. `week_occurrences`'
+  output gains a 10th column, `CONTENT_REF`, computed via
+  `core/schedule-lib.sh`'s `content_ref_count` (merged across every row
+  sharing `KIND_ID`, same as `{count}`'s own merge). The holiday check
+  here is its own, not a reuse of `AUTO_SHIFT_ON_HOLIDAY`'s: that field
+  suppresses the *row* itself so `{count}` can shift everything
+  downstream by a whole slot; here the row still has to emit normally
+  (a week-derived slot name must keep meaning "this week's slot"
+  regardless of what's playing there -- `occurrence_holiday`'s own
+  render-time check independently renders a colliding week cancelled),
+  only the *content-index advance* skips, rolling that content to the
+  next eligible week instead. A week past the end of `CONTENT_LIST_FILE`
+  (more eligible weeks than content) gets an empty `CONTENT_REF` for
+  free -- renders as a normal not-yet-authored slot.
 - **A content-to-slot map** — `SLOT_ID|SOURCE_PATH` pairs, so the build
   knows which file backs each scheduled slot. No fixed naming
   convention is assumed — lay content out however suits the course.
