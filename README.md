@@ -394,6 +394,24 @@ A backend at `backends/<name>/` implements three executable scripts:
 - **`extract-title.sh SOURCE_PATH`** — print the slot's display title
   (empty if none).
 
+This contract fits a course whose compile step is simple enough to
+express as "one source file + a shared preamble + an optional variant
+header" — that's what `backends/latex-beamer/build-slot.sh` actually
+implements, and it's genuinely all `backends/test/` and `backends/typst/`
+need too. A course whose real build is materially more complex (custom
+per-course preamble/footer/style files, multi-stage placeholder
+injection, diagram generation, announcements, its own parallel-build-safe
+job isolation — real orchestration, not just a different toolchain) is
+expected to keep that orchestration as its own bespoke build script,
+sourcing whatever narrower `core/*.sh` primitives it actually needs
+(`sgt_date`, `get_slot_version`, `splice_markers`, etc.) rather than
+forcing the whole pipeline through `build_slot`/`content_hash`.
+`cs1101s/course-materials` is the real example: its own
+`scripts/build-lecture.sh`/`build-studio.sh` and
+`scripts/calculate-lecture-hash.sh`/`calculate-studio-hash.sh` do this —
+they never call `backend_build_slot`/`backend_content_hash` at all, and
+that's by design, not a migration owed to this toolkit.
+
 Interactive-snippet testing (e.g. running embedded code blocks through a
 real interpreter like py-slang) is **not part of this toolkit** — it
 stays entirely inside the consuming course repo (see

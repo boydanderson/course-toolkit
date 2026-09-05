@@ -4,8 +4,14 @@
 % design, ported and reconciled against CS1101S's real output at Stage
 % 4-5 (the baseline-diff migration), not something the generic backend
 % bakes in. This proves the compile pipeline end-to-end with the
-% standard Beamer theme; a course wanting its own look supplies its own
-% preamble (see build-slot.sh's PREAMBLE override).
+% standard Beamer theme. build-slot.sh has no override for this file --
+% a course whose build needs exceed this backend's "one source file +
+% this preamble + an optional variant header" contract (custom
+% preamble/footer/style files, multi-stage placeholder injection,
+% diagram generation, etc.) is expected to keep its own bespoke build
+% script instead, the way cs1101s/course-materials' real
+% build-lecture.sh/build-studio.sh already do -- see this repo's own
+% README for that split.
 \usetheme{default}
 \usepackage[T1]{fontenc}
 \usepackage{lmodern}
