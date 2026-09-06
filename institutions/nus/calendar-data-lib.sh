@@ -474,10 +474,21 @@ nus_calendar_cache_file() {
     echo "$(calendar_data_dir)/nus-calendar-${acad_year}.conf"
 }
 
+# load_calendar_data_cache YEAR1 YEAR2 ACAD_YEAR [QUIET] -> populates
+# SG_HOLIDAYS/NUS_SPECIAL_DATES from the on-disk cache files (no network
+# call -- see fetch-calendar-data.sh for that). QUIET (optional, any
+# non-empty value) suppresses only the success line ("Loaded N holidays
+# and M NUS special dates..."); real errors (a missing/incomplete cache)
+# still print regardless. Useful for a caller that re-invokes this many
+# times in a loop (e.g. once per lecture in a hash-check pass) and would
+# otherwise print the same success line once per iteration for no
+# reason -- a single top-level command (generate a calendar page, update
+# the cache) should leave QUIET unset so that confirmation still shows.
 load_calendar_data_cache() {
     local year1="$1"
     local year2="$2"
     local acad_year="$3"
+    local quiet="${4:-}"
     local sg_file
     local nus_file
 
@@ -520,7 +531,9 @@ load_calendar_data_cache() {
         return 1
     fi
 
-    echo " - Loaded ${#SG_HOLIDAYS[@]} holidays and ${#NUS_SPECIAL_DATES[@]} NUS special dates from $(calendar_data_dir)" >&2
+    if [ -z "$quiet" ]; then
+        echo " - Loaded ${#SG_HOLIDAYS[@]} holidays and ${#NUS_SPECIAL_DATES[@]} NUS special dates from $(calendar_data_dir)" >&2
+    fi
     return 0
 }
 

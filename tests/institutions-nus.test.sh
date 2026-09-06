@@ -69,4 +69,24 @@ test_institutions_nus() {
     # reset.sh (>= 7) called it Sem 1 of the AY beginning THIS August.
     assert_eq "nus_academic_semester: July start -> Sem 2 (the regression case)" \
         "2|2025|2026" "$(nus_academic_semester 2026-07-15)"
+
+    # load_calendar_data_cache's QUIET (4th, optional) param: suppresses
+    # only the success line, not a real error -- a caller invoking this
+    # many times in a loop (e.g. once per lecture in a hash-check pass)
+    # shouldn't print the same confirmation on every iteration.
+    local scratch
+    scratch="$(mktemp -d)"
+    local CALENDAR_DATA_DIR="$scratch"
+    printf '2026-08-09|National Day\n' > "$scratch/sg-holidays-2026-2027.conf"
+    printf '2026-09-19|Recess Week\n' > "$scratch/nus-calendar-2026-2027.conf"
+    local out
+    out="$(load_calendar_data_cache 2026 2027 2026-2027 2>&1 >/dev/null)"
+    assert_contains "load_calendar_data_cache: unset QUIET still prints the success line" \
+        "$out" "Loaded 1 holidays and 1 NUS special dates"
+    out="$(load_calendar_data_cache 2026 2027 2026-2027 1 2>&1 >/dev/null)"
+    assert_eq "load_calendar_data_cache: QUIET suppresses the success line" "" "$out"
+    out="$(load_calendar_data_cache 2099 2100 2099-2100 1 2>&1 >/dev/null)"
+    assert_contains "load_calendar_data_cache: QUIET does NOT suppress a real error" \
+        "$out" "Error: Missing cached Singapore holiday data"
+    rm -rf "$scratch"
 }
