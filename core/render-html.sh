@@ -271,6 +271,16 @@ _occasion_links_html() {
 # HOLIDAY_FIRST exactly. Default unset preserves every existing
 # consumer's exact current text.
 #
+# CANCELLED_NEWLINE (19th, optional, any non-empty value) splits the
+# cancellation text across two stacked <div>s instead of one line --
+# e.g. "🧘 NUS Well-Being Day" on its own line, "(No Lecture)" smaller
+# and below it -- matching cs1101s/course-materials' real, original
+# hand-coded page (render_cancelled's own two-div layout) more closely
+# than a single run-on line. The two lines follow HOLIDAY_FIRST's own
+# word order (holiday then "(No <label>)", or "No <label>" then
+# "(<holiday>)"), just split at the same point either way. Default
+# unset keeps today's exact single-line text.
+#
 # OCCURRENCES_FILE's own 9th column, CONFLICT_HOLIDAY (schedule-lib.sh's
 # week_occurrences), overrides the holiday-cancellation rendering above
 # when non-empty for a row -- a collision the maintainer has already
@@ -287,7 +297,7 @@ render_kind_cell_html() {
     local extra_link_label="${11:-}" extra_link_file="${12:-}"
     local occasion_links_file="${13:-}" suffix_filter="${14:-}"
     local graded_file="${15:-}" extra_slots_file="${16:-}" extra_note_file="${17:-}"
-    local holiday_first="${18:-}"
+    local holiday_first="${18:-}" cancelled_newline="${19:-}"
     _calendar_palette "$palette"
     local rows
     local -a extra_slot_ids=()
@@ -364,10 +374,18 @@ render_kind_cell_html() {
             local emoji prefix=""
             emoji="$(holiday_emoji "$holiday_name" "$emoji_file")"
             [ -n "$emoji" ] && prefix="${emoji} "
+            local cancelled_line1 cancelled_line2
             if [ -n "$holiday_first" ]; then
-                cell_html="${cell_html}<div style=\"${cancelled_style}\">${prefix}$(echo "$holiday_name" | _html_escape) (No $(echo "$rlabel" | _html_escape))</div>"
+                cancelled_line1="${prefix}$(echo "$holiday_name" | _html_escape)"
+                cancelled_line2="(No $(echo "$rlabel" | _html_escape))"
             else
-                cell_html="${cell_html}<div style=\"${cancelled_style}\">No $(echo "$rlabel" | _html_escape) (${prefix}$(echo "$holiday_name" | _html_escape))</div>"
+                cancelled_line1="No $(echo "$rlabel" | _html_escape)"
+                cancelled_line2="(${prefix}$(echo "$holiday_name" | _html_escape))"
+            fi
+            if [ -n "$cancelled_newline" ]; then
+                cell_html="${cell_html}<div style=\"${cancelled_style}\">${cancelled_line1}</div><div style=\"margin-top:2px;font-size:0.85rem;color:${CAL_CANCELLED};\">${cancelled_line2}</div>"
+            else
+                cell_html="${cell_html}<div style=\"${cancelled_style}\">${cancelled_line1} ${cancelled_line2}</div>"
             fi
             any_cancelled=1
             continue
@@ -462,7 +480,8 @@ render_kind_cell_html() {
 # for a 4-kind-column course. Unset (the default) omits the `<colgroup>`
 # entirely, leaving column widths to the browser -- today's exact
 # existing behavior for every course that's never needed explicit
-# proportions.
+# proportions. CANCELLED_NEWLINE (25th, optional) -- see
+# render_kind_cell_html's own comment; threads straight through.
 render_html_calendar() {
     local kinds_conf="$1" start_monday="$2" num_weeks="$3" recess_after="$4"
     local titles_file="$5" allowlist_file="$6" labels_file="$7" notes_file="$8"
@@ -472,7 +491,7 @@ render_html_calendar() {
     local occasion_links_file="${16:-}" graded_file="${17:-}"
     local extra_slots_file="${18:-}" extra_note_file="${19:-}"
     local special_dates_file="${20:-}" key_events_file="${21:-}" show_week_dates="${22:-}"
-    local holiday_first="${23:-}" column_widths="${24:-}"
+    local holiday_first="${23:-}" column_widths="${24:-}" cancelled_newline="${25:-}"
     [ -z "$today" ] && today="$(sgt_date '+%Y-%m-%d')"
     _calendar_palette "$palette"
 
@@ -591,7 +610,7 @@ render_html_calendar() {
             local k="${col_kind[$i]}" s="${col_suffix[$i]}"
             local cell extra_label=""
             [ -n "$kind_extra_links_file" ] && extra_label="$(kind_extra_link_label "$k" "$kind_extra_links_file")"
-            cell="$(render_kind_cell_html "$teaching_week" "$k" "$occ_file" "$titles_file" "$allowlist_file" "$labels_file" "$base_url" "$holidays_file" "$emoji_file" "$palette" "$extra_label" "$extra_links_file" "$occasion_links_file" "$s" "$graded_file" "$extra_slots_file" "$extra_note_file" "$holiday_first")"
+            cell="$(render_kind_cell_html "$teaching_week" "$k" "$occ_file" "$titles_file" "$allowlist_file" "$labels_file" "$base_url" "$holidays_file" "$emoji_file" "$palette" "$extra_label" "$extra_links_file" "$occasion_links_file" "$s" "$graded_file" "$extra_slots_file" "$extra_note_file" "$holiday_first" "$cancelled_newline")"
             printf '<td style="%s">%s</td>' "$row_style" "$cell"
         done
         local -a note_parts=()

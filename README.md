@@ -254,6 +254,7 @@ actually wants to change:
 | `CALENDAR_RECESS_BG` | the Recess row's spanning-cell background (see "Recess row" above) — text color is `CALENDAR_NOTES_COLOR`, not a separate key | *(unset — no background)* |
 | `CALENDAR_SHOW_WEEK_DATES` | any non-empty value shows a "10 Aug – 14 Aug" date-range sub-line under every week's number | *(unset — no date sub-line)* |
 | `CALENDAR_COLUMN_WIDTHS` | comma-separated CSS width values (one per column: Week, then each kind column, then Notes) — emits a `<colgroup>` right after `<table>`, e.g. `7%,18%,22%,18%,22%,13%` | *(unset — no `<colgroup>`, widths left to the browser)* |
+| `CALENDAR_CANCELLED_NEWLINE` | any non-empty value splits a holiday-cancellation cell across two lines (e.g. the holiday name, then "(No Lecture)" smaller below it) instead of one run-on line — the two lines still follow `HOLIDAY_FIRST`'s own word order, just split at the same point | *(unset — one line, today's exact text)* |
 
 ```
 CALENDAR_BORDER_COLOR = #dddddd

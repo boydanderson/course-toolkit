@@ -39,6 +39,25 @@ test_render_html() {
     assert_contains "HOLIDAY_FIRST: holiday name comes first" "$out" "🎉 Test Holiday (No Lecture)"
     assert_not_contains "HOLIDAY_FIRST: default phrase order is gone" "$out" "No Lecture (🎉 Test Holiday)"
 
+    # CANCELLED_NEWLINE (25th param): splits the cancellation text across
+    # two stacked <div>s instead of one line, in both word orders --
+    # default order ("No Lecture" then "(holiday)") and HOLIDAY_FIRST
+    # ("holiday" then "(No Lecture)"). Unset reproduces today's exact
+    # single-line text (already covered by the two assertions above).
+    out="$(render_html_calendar "$kinds" 2026-08-10 1 0 /dev/null /dev/null \
+        /dev/null /dev/null https://x "$holidays" "$emoji" "" "" "" "" "" "" "" "" "" "" "" "" "" 1)"
+    assert_contains "CANCELLED_NEWLINE, default order: label line on its own" \
+        "$out" "<div style=\"font-weight:600;color:#c0392b;\">No Lecture</div>"
+    assert_contains "CANCELLED_NEWLINE, default order: holiday line styled and separate" \
+        "$out" "<div style=\"margin-top:2px;font-size:0.85rem;color:#c0392b;\">(🎉 Test Holiday)</div>"
+
+    out="$(render_html_calendar "$kinds" 2026-08-10 1 0 /dev/null /dev/null \
+        /dev/null /dev/null https://x "$holidays" "$emoji" "" "" "" "" "" "" "" "" "" "" "" 1 "" 1)"
+    assert_contains "CANCELLED_NEWLINE + HOLIDAY_FIRST: holiday line on its own" \
+        "$out" "<div style=\"font-weight:600;color:#c0392b;\">🎉 Test Holiday</div>"
+    assert_contains "CANCELLED_NEWLINE + HOLIDAY_FIRST: '(No Lecture)' on its own, smaller" \
+        "$out" "<div style=\"margin-top:2px;font-size:0.85rem;color:#c0392b;\">(No Lecture)</div>"
+
     # CONFLICT_HOLIDAY (9th column in week_occurrences' own output, see
     # schedule-lib.sh's HOLIDAY_CONFLICT_WEEKS): overrides the
     # cancellation branch above -- renders normally (title + links) with

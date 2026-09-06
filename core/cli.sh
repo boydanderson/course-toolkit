@@ -198,6 +198,7 @@ PDF_BASE_URL="$(get_course_var PDF_BASE_URL)"
 CALENDAR_PALETTE="$(get_course_var CALENDAR_BORDER_COLOR)|$(get_course_var CALENDAR_HEADER_BG)|$(get_course_var CALENDAR_LINK_COLOR)|$(get_course_var CALENDAR_PENDING_COLOR)|$(get_course_var CALENDAR_CANCELLED_COLOR)|$(get_course_var CALENDAR_NOTES_COLOR)|$(get_course_var CALENDAR_CURRENT_BG)|$(get_course_var CALENDAR_CURRENT_BORDER_COLOR)|$(get_course_var CALENDAR_ROW_ODD_BG)|$(get_course_var CALENDAR_ROW_EVEN_BG)|$(get_course_var CALENDAR_OCCASION_COLOR)|$(get_course_var CALENDAR_CURRENT_WEEK_BG)|$(get_course_var CALENDAR_WEEK_BG)|$(get_course_var CALENDAR_RECESS_BG)"
 CALENDAR_SHOW_WEEK_DATES="$(get_course_var CALENDAR_SHOW_WEEK_DATES)"
 CALENDAR_COLUMN_WIDTHS="$(get_course_var CALENDAR_COLUMN_WIDTHS)"
+CALENDAR_CANCELLED_NEWLINE="$(get_course_var CALENDAR_CANCELLED_NEWLINE)"
 
 _content_map_path() {
     # || true: a scheduled slot with no content-map entry (unauthored,
@@ -284,7 +285,8 @@ cmd_canvas() {
         "$NUM_WEEKS" "$RECESS_AFTER_WEEK" "$titles" "$ALLOWLIST" "$LABELS" "$NOTES" \
         "$PDF_BASE_URL" "$HOLIDAYS" "$EMOJI" "$CALENDAR_PALETTE" "" \
         "$KIND_EXTRA_LINKS" "$EXTRA_LINKS" "$OCCASION_LINKS" "$GRADED_SLOTS" "$EXTRA_SLOTS" "$EXTRA_NOTE" \
-        "$SPECIAL_DATES" "$KEY_EVENTS" "$CALENDAR_SHOW_WEEK_DATES" "$HOLIDAY_FIRST" "$CALENDAR_COLUMN_WIDTHS"
+        "$SPECIAL_DATES" "$KEY_EVENTS" "$CALENDAR_SHOW_WEEK_DATES" "$HOLIDAY_FIRST" "$CALENDAR_COLUMN_WIDTHS" \
+        "$CALENDAR_CANCELLED_NEWLINE"
     rm -f "$titles"
 
     local key_events
