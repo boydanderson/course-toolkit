@@ -130,7 +130,7 @@ _html_variant_links() {
     local -a vlist
     IFS=',' read -ra vlist <<< "$variants"
     [ "$variants" = "none" ] && vlist=("")
-    if [ -n "$public_variants" ]; then
+    if [ -n "$public_variants" ] && [ "$public_variants" != "-" ]; then
         local -a filtered=() vv
         for vv in "${vlist[@]}"; do
             case ",${public_variants}," in *",${vv},"*) filtered+=("$vv") ;; esac

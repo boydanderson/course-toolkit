@@ -157,6 +157,16 @@ EOF
     assert_contains "PUBLIC_VARIANTS unset: both variants linked (today's exact default) (2)" \
         "$links" "Student"
 
+    # PUBLIC_VARIANTS="-" (the standard "omit or use -" placeholder every
+    # other optional session-kinds.conf field uses) must be treated as
+    # unset too -- a real bug found against cs1101s/course-materials'
+    # actual config.
+    links="$(_md_variant_links studio S1 instructor,student https://x 1 "" "" -)"
+    assert_contains "PUBLIC_VARIANTS=\"-\": treated as unset, both variants still linked" \
+        "$links" "Instructor"
+    assert_contains "PUBLIC_VARIANTS=\"-\": treated as unset, both variants still linked (2)" \
+        "$links" "Student"
+
     links="$(_md_variant_links studio S1 instructor,student https://x 1 "" "" student)"
     assert_not_contains "PUBLIC_VARIANTS=student: instructor variant never appears, not even pending" \
         "$links" "Instructor"

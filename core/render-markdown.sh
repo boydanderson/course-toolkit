@@ -40,7 +40,7 @@ _md_variant_links() {
     if [ "$variants" = "none" ]; then
         vlist=("")
     fi
-    if [ -n "$public_variants" ]; then
+    if [ -n "$public_variants" ] && [ "$public_variants" != "-" ]; then
         local -a filtered=() vv
         for vv in "${vlist[@]}"; do
             case ",${public_variants}," in *",${vv},"*) filtered+=("$vv") ;; esac
