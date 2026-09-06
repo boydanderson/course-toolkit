@@ -23,10 +23,10 @@ were real and all of which it now catches.
 2. **Write `config/course.mk`.** Every key below is real and read by
    `core/cli.sh` — this isn't a partial list:
    ```make
-   COURSE_CODE = CS1101S
-   COURSE_NAME = Programming Methodology
-   HOSTING_ORG = cs1101s
-   CANVAS_HOST = canvas.nus.edu.sg
+   COURSE_CODE = XX1234
+   COURSE_NAME = Full Course Name
+   HOSTING_ORG = your-org
+   CANVAS_HOST = canvas.your-institution.edu
    RENDERER = latex-beamer
 
    SEMESTER_START_MONDAY = 2026-08-10
@@ -34,10 +34,11 @@ were real and all of which it now catches.
    RECESS_AFTER_WEEK = 6
    PDF_BASE_URL = https://your-hosting-repo.github.io/pdfs
    ```
-   `RECESS_AFTER_WEEK = 0` if there's no mid-semester recess.
-   `RENDERER` must be a directory under `backends/` — right now only
-   `latex-beamer` is real (see step 5 if the course needs something
-   else).
+   Ask the user for the real values — don't guess `COURSE_CODE`,
+   `HOSTING_ORG`, or the semester dates. `RECESS_AFTER_WEEK = 0` if
+   there's no mid-semester recess. `RENDERER` must be a directory under
+   `backends/` — `latex-beamer` and `typst` are real today (see step 5
+   if the course needs something else).
 
 3. **Write `config/session-kinds.conf`** — the course's actual weekly
    shape. Ask the user for it rather than guessing; get concrete
@@ -99,15 +100,16 @@ were real and all of which it now catches.
      what's publicly visible.
    - `config/session-kind-labels.conf` (`WEEK|KIND_ID|LABEL`) for a
      week+kind with no real occurrence that still needs a label (e.g.
-     an in-class-only session with no take-home sheet — see this file's
-     own real example in `cs1101s/course-materials`).
+     an in-class-only session with no take-home sheet).
    - `config/week-notes.conf` (`WEEK|NOTE`) for maintainer notes.
    - `config/holidays.conf` (`DATE|NAME`) + `config/holiday-emoji.conf`
      (`HOLIDAY_NAME|EMOJI`) for holiday-cancellation rendering — this is
      for a *specific semester's* real dates, not the structural
-     exceptions from step 3. If the institution already has a holiday
-     feed elsewhere in the repo, generate this from it; don't invent
-     dates.
+     exceptions from step 3. If the course is at NUS, run
+     `institutions/nus/fetch-calendar-data.sh` (see README) to fetch
+     real Singapore + NUS academic-calendar dates instead of hand-typing
+     them; otherwise generate this from whatever holiday feed the
+     institution already publishes — don't invent dates.
 
 7. **Copy `examples/Makefile`** into the repo root, and set any
    `..._FILE` environment variable overrides the Makefile documents for
@@ -164,12 +166,13 @@ Specifically look for, in the `readme`/`canvas` output:
 - **`TOOLKIT_DIR` and `COURSE_ROOT` must both be set (and exported)
   before sourcing any `core/*.sh` file.** `cli.sh` handles this itself;
   if you're sourcing the libraries directly instead (see README's
-  "Using it"), set both first.
+  "Quick start"), set both first.
 
-## A real, working example
+## If this checklist doesn't cover something
 
-`cs1101s/course-materials` is the first real consumer — its
-`config/course.mk`, `config/session-kinds.conf`, and
-`config/content-map.conf` are real, verified-against-real-content
-examples, not fixtures. Read those before inventing your own approach
-to something this checklist doesn't cover.
+Check `tests/*.test.sh` — every `core/*.sh` function's behavior is
+exercised there against realistic fixtures, including the edge cases
+(holiday collisions, excluded weeks, split columns, multi-day sessions)
+this checklist only summarizes. If a fixture doesn't cover the case
+you're stuck on, that's worth flagging to the user rather than guessing
+silently — it may be a real gap in the toolkit, not just missing docs.
