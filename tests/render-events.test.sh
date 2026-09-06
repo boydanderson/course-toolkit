@@ -34,6 +34,13 @@ EOF
     assert_contains "html: Final Exam row present" "$html" "Final Exam"
     assert_contains "html: time range uses an en dash" "$html" "18:00&ndash;21:00"
 
+    # Date column: format_date_long ("DD Mon YYYY"), not the raw ISO
+    # input -- a Key Events row has no surrounding week/date-range
+    # context to anchor the year the way a teaching week's own date
+    # sub-line does, so the year stays in.
+    assert_contains "html: date shown as 'DD Mon YYYY', not raw ISO" "$html" "14 Oct 2026"
+    assert_not_contains "html: raw ISO date doesn't leak through" "$html" "2026-10-14"
+
     # Sort order: Sumobot (Oct) must appear before Final Exam (Nov) in
     # the rendered output, even though the source file listed Final Exam
     # first.
@@ -46,10 +53,11 @@ EOF
     local md
     md="$(render_key_events_markdown "$events")"
     assert_contains "markdown: header row (incl. Day)" "$md" "| Date | Day | Time | Event |"
-    assert_contains "markdown: Sumobot row present, with its real weekday" \
-        "$md" "2026-10-14 | Wednesday | 18:00-21:00 | Sumobot Competition"
-    assert_contains "markdown: Final Exam row present, with its real weekday" \
-        "$md" "2026-11-25 | Wednesday | 09:00-11:00 | Final Exam"
+    assert_contains "markdown: Sumobot row present, with its real weekday, date as 'DD Mon YYYY'" \
+        "$md" "14 Oct 2026 | Wednesday | 18:00-21:00 | Sumobot Competition"
+    assert_contains "markdown: Final Exam row present, with its real weekday, date as 'DD Mon YYYY'" \
+        "$md" "25 Nov 2026 | Wednesday | 09:00-11:00 | Final Exam"
+    assert_not_contains "markdown: raw ISO date doesn't leak through" "$md" "2026-10-14"
 
     # HTML never had a Day column (unlike markdown -- matches
     # cs1101s/course-materials' own real, asymmetric tables).

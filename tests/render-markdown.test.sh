@@ -299,8 +299,9 @@ EOF
     # (semester_recess_week, tested directly in semester-lib.test.sh).
     out="$(render_markdown_calendar "$kinds" 2026-08-10 4 2 "$titles" "$allowlist" \
         /dev/null /dev/null https://x /dev/null /dev/null)"
-    assert_contains "recess row appears" "$out" \
-        "| Recess | - | - | 🏖️ Recess Week - No classes (2026-08-24 - 2026-08-28) |"
+    assert_contains "recess row appears, dates as 'DD Mon' with an en dash (not raw ISO)" "$out" \
+        "| Recess | - | - | 🏖️ Recess Week - No classes (24 Aug – 28 Aug) |"
+    assert_not_contains "recess row: raw ISO date doesn't leak through" "$out" "2026-08-24"
     local recess_pos week2_pos week3_pos
     recess_pos=$(echo "$out" | grep -bo "^| Recess |" | head -1 | cut -d: -f1)
     week2_pos=$(echo "$out" | grep -bo "^| 2 |" | head -1 | cut -d: -f1)

@@ -34,20 +34,6 @@ _html_escape() {
     sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g'
 }
 
-# _format_date_short YYYY-MM-DD -> "10 Aug" -- same GNU/BSD `date`
-# branching used throughout this toolkit (e.g. semester-lib.sh), ported
-# verbatim from cs1101s/course-materials' own generate-canvas-html.sh
-# (its local `format_date_short`) for `render_html_calendar`'s
-# SHOW_WEEK_DATES week-date sub-line.
-_format_date_short() {
-    local d="$1"
-    if date -d "$d" '+%d %b' >/dev/null 2>&1; then
-        date -d "$d" '+%d %b'
-    else
-        date -j -f '%Y-%m-%d' "$d" '+%d %b'
-    fi
-}
-
 # _calendar_palette -- the calendar's colors, generic defaults out of
 # the box, overridable per-course via config/course.mk (see cli.sh's
 # CALENDAR_* lookups, and README's "Customizing the calendar's colors").
@@ -542,8 +528,9 @@ render_html_calendar() {
             local recess_bg_style=""
             [ -n "$CAL_RECESS_BG" ] && recess_bg_style="background:${CAL_RECESS_BG};"
             echo '<tr>'
-            printf '<td colspan="%d" style="%s%stext-align:center;font-style:italic;color:%s;">🏖️ Recess Week - No classes (%s - %s)</td>' \
-                "$recess_colspan" "$td_style" "$recess_bg_style" "$CAL_NOTES" "$recess_monday" "$recess_friday"
+            printf '<td colspan="%d" style="%s%stext-align:center;font-style:italic;color:%s;">🏖️ Recess Week - No classes (%s &ndash; %s)</td>' \
+                "$recess_colspan" "$td_style" "$recess_bg_style" "$CAL_NOTES" \
+                "$(format_date_short "$recess_monday")" "$(format_date_short "$recess_friday")"
             echo '</tr>'
         fi
 
@@ -600,7 +587,7 @@ render_html_calendar() {
         if [ -n "$show_week_dates" ]; then
             local week_friday
             week_friday="$(add_days "$monday" 4)"
-            week_dates_html="<div style=\"font-weight:normal;font-size:0.75rem;color:#666666;\">$(_format_date_short "$monday") &ndash; $(_format_date_short "$week_friday")</div>"
+            week_dates_html="<div style=\"font-weight:normal;font-size:0.75rem;color:#666666;\">$(format_date_short "$monday") &ndash; $(format_date_short "$week_friday")</div>"
         fi
 
         echo '<tr>'

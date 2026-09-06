@@ -104,9 +104,10 @@ for every renderer-specific step.
 
   **Recess row**: when `RECESS_AFTER_WEEK` (see `config/course.mk` below)
   is nonzero, both renderers also insert a "Recess" row (dashes in every
-  column, a "🏖️ Recess Week - No classes (dates)" note) between that
-  teaching week and the next — see `core/semester-lib.sh`'s
-  `semester_recess_week`.
+  column, a "🏖️ Recess Week - No classes (24 Aug – 28 Aug)" note, dates
+  via `date-lib.sh`'s `format_date_short` — no year, matching a teaching
+  week's own date sub-line) between that teaching week and the next —
+  see `core/semester-lib.sh`'s `semester_recess_week`.
 
   **Holiday-aware auto-shift**: every other holiday-cancellation feature
   in this toolkit (`is_holiday`, `CANCEL_EXTRA_WEEKDAYS`, the Notes
@@ -282,7 +283,10 @@ existing course's output is completely unaffected by their existence:
   exam, a guest lecture) that don't fit the regular weekly grid.
   `config/key-events.conf`, format `DATE|START_TIME|END_TIME|NAME`, one
   per line. `cli readme`/`cli canvas` append it after the main calendar
-  table automatically if the file exists and has real rows.
+  table automatically if the file exists and has real rows. The Date
+  column shows `date-lib.sh`'s `format_date_long` ("10 Aug 2026") —
+  unlike the Recess row/week date sub-line above, a Key Events row has
+  no adjacent week to anchor its year, so the year stays in.
 - **Extra Notes-column categories** (`cli readme` and `cli canvas` both)
   — besides real holidays (`week_holiday_notes`, always on if
   `HOLIDAYS_FILE` is set), the weekly Notes column can also surface a

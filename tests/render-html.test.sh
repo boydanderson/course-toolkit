@@ -563,8 +563,9 @@ EOF
         /dev/null /dev/null https://x /dev/null /dev/null)"
     assert_contains "recess row is one spanning cell across the whole row" \
         "$out" 'colspan="4"'
-    assert_contains "recess row's note, inside the spanning cell" \
-        "$out" "🏖️ Recess Week - No classes (2026-08-24 - 2026-08-28)"
+    assert_contains "recess row's note, inside the spanning cell, dates as 'DD Mon' with an en dash (not raw ISO)" \
+        "$out" "🏖️ Recess Week - No classes (24 Aug &ndash; 28 Aug)"
+    assert_not_contains "recess row: raw ISO date doesn't leak through" "$out" "2026-08-24"
     local recess_row_line
     recess_row_line="$(echo "$out" | grep "Recess Week")"
     assert_eq "recess row has exactly one <td> (the spanning cell), not one per column" \

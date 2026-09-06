@@ -21,4 +21,13 @@ test_date_lib() {
         "Monday" "$(day_of_week_name 2026-08-10)"
     assert_eq "day_of_week_name: a known Sunday" \
         "Sunday" "$(day_of_week_name 2026-08-16)"
+
+    assert_eq "format_date_short: single-digit day is zero-padded, no year" \
+        "10 Aug" "$(format_date_short 2026-08-10)"
+    assert_eq "format_date_short: double-digit day" \
+        "25 Nov" "$(format_date_short 2026-11-25)"
+    assert_eq "format_date_long: same as format_date_short, plus the year" \
+        "10 Aug 2026" "$(format_date_long 2026-08-10)"
+    assert_eq "format_date_long: crosses into a different year cleanly" \
+        "03 Jan 2027" "$(format_date_long 2027-01-03)"
 }

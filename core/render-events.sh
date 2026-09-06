@@ -26,7 +26,11 @@ _sorted_events() {
 
 # render_key_events_html EVENTS_FILE [PALETTE] -> an HTML <table>, or
 # empty output if the file's missing/empty. Format:
-# DATE|START_TIME|END_TIME|NAME, one per line.
+# DATE|START_TIME|END_TIME|NAME, one per line. The Date column shows
+# date-lib.sh's format_date_long ("10 Aug 2026") rather than the raw
+# ISO input -- unlike a teaching week's own date sub-line (which has no
+# year, since it's already anchored to a specific week), a Key Events
+# table lists dates with no such context, so the year stays in.
 #
 # PALETTE (optional): BORDER|HEADER_BG|ROW_ODD_BG|ROW_EVEN_BG -- border/
 # header default to a plain #dddddd/#eeeeee if omitted; ROW_ODD_BG/
@@ -60,7 +64,7 @@ render_key_events_html() {
         local td_style="$cell_base"
         [ -n "$row_bg" ] && td_style="${cell_base}background:${row_bg};"
         printf '<tr><td style="%s">%s</td><td style="%s">%s&ndash;%s</td><td style="%s">%s</td></tr>\n' \
-            "$td_style" "$date" "$td_style" "$start" "$end" \
+            "$td_style" "$(format_date_long "$date")" "$td_style" "$start" "$end" \
             "$td_style" "$(echo "$name" | _html_escape_events)"
         i=$((i + 1))
     done <<< "$rows"
@@ -82,6 +86,6 @@ render_key_events_markdown() {
     local date start end name
     while IFS='|' read -r date start end name; do
         [ -z "$date" ] && continue
-        echo "| $date | $(day_of_week_name "$date") | $start-$end | $name |"
+        echo "| $(format_date_long "$date") | $(day_of_week_name "$date") | $start-$end | $name |"
     done <<< "$rows"
 }

@@ -522,7 +522,7 @@ render_markdown_calendar() {
             for ((i = 0; i < ${#col_kind[@]}; i++)); do
                 recess_row="${recess_row} - |"
             done
-            recess_row="${recess_row} 🏖️ Recess Week - No classes (${recess_monday} - ${recess_friday}) |"
+            recess_row="${recess_row} 🏖️ Recess Week - No classes ($(format_date_short "$recess_monday") – $(format_date_short "$recess_friday")) |"
             echo "$recess_row"
         fi
 
