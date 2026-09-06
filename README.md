@@ -215,7 +215,13 @@ for every renderer-specific step.
   optional, all empty-safe — pass `/dev/null` for any you don't need):
   a release allow-list (one slot ID per line), a `WEEK|KIND_ID|LABEL`
   override file for a week+kind with no real occurrence (e.g. an
-  in-class-only session with no take-home sheet), a `WEEK|NOTE` file for
+  in-class-only session with no take-home sheet) — a row may carry an
+  optional 4th field, `WEEK|KIND_ID|LABEL|COLOR`, overriding
+  `CALENDAR_OCCASION_COLOR` for just that one label (HTML only; a
+  course whose occasion labels come from more than one source and only
+  wants some of them colored, e.g. a real assessment vs. a plain
+  reflection-week override, sets this per row instead of coloring every
+  occasion label the same way) — a `WEEK|NOTE` file for
   maintainer notes, a `DATE|NAME` holiday calendar, and a
   `HOLIDAY_NAME|EMOJI` map (an occurrence whose date is in the holiday
   file renders as "No `<kind>` (`<emoji>` `<holiday>`)", overriding even
@@ -242,7 +248,7 @@ actually wants to change:
 | `CALENDAR_CURRENT_BG` | the current teaching week's row background (data cells) | *(unset — no highlight)* |
 | `CALENDAR_CURRENT_BORDER_COLOR` | the current week's number-cell left-accent border | *(unset — no accent)* |
 | `CALENDAR_ROW_ODD_BG` / `CALENDAR_ROW_EVEN_BG` | alternating row backgrounds | *(unset — no banding)* |
-| `CALENDAR_OCCASION_COLOR` | an occasion label's (e.g. an assessment replacing a slot) text | *(unset — no color)* |
+| `CALENDAR_OCCASION_COLOR` | an occasion label's (e.g. an assessment replacing a slot) text, when the label's own row (see below) doesn't set its own color | *(unset — no color)* |
 | `CALENDAR_CURRENT_WEEK_BG` | the current week's own number-cell background, distinct from `CALENDAR_CURRENT_BG`'s data cells | *(unset — falls back to `CALENDAR_CURRENT_BG`)* |
 | `CALENDAR_WEEK_BG` | every (non-current) week's number-cell background | *(unset — no distinct background)* |
 | `CALENDAR_RECESS_BG` | the Recess row's spanning-cell background (see "Recess row" above) — text color is `CALENDAR_NOTES_COLOR`, not a separate key | *(unset — no background)* |
@@ -291,17 +297,24 @@ existing course's output is completely unaffected by their existence:
   Holiday notes are also filtered down to days that could actually
   collide with a real class: `render_markdown_calendar`/
   `render_html_calendar` compute `schedule-lib.sh`'s `class_weekdays`
-  from `session-kinds.conf` (every `WEEKDAY` plus every
-  `CANCEL_EXTRA_WEEKDAYS` day) and pass it to `week_holiday_notes` as
-  its optional `CLASS_WEEKDAYS` argument — a holiday landing on a day
-  no kind ever meets (e.g. a Sunday holiday for a Mon/Wed/Thu/Fri
-  course) is skipped entirely instead of noted, since it can't possibly
-  interfere with any class. This is the current default for both
-  renderers, applied uniformly to every course; special dates and key
-  events are deliberately **not** filtered this way (a Key Event like a
-  final exam is worth noting regardless of whether class meets that
-  day). Calling `week_holiday_notes` directly with `CLASS_WEEKDAYS`
-  omitted keeps scanning every day, unfiltered.
+  from `session-kinds.conf` **for that specific teaching week** (every
+  `WEEKDAY` plus every `CANCEL_EXTRA_WEEKDAYS` day, but only for a row
+  actually eligible that week — its `WEEK_START`/`WEEK_END`/
+  `EXCLUDE_WEEKS` are checked, so e.g. a studio with `WEEK_START=2`
+  doesn't make Monday count as a class day for week 1's own scan) and
+  pass it to `week_holiday_notes` as its optional `CLASS_WEEKDAYS`
+  argument — a holiday landing on a day no kind meets *that week*
+  (e.g. a Sunday holiday for a Mon/Wed/Thu/Fri course, or a Monday
+  holiday in a week before that course's studio has even started) is
+  skipped entirely instead of noted, since it can't possibly interfere
+  with any class. This is the current default for both renderers,
+  applied uniformly to every course; special dates and key events are
+  deliberately **not** filtered this way (a Key Event like a final exam
+  is worth noting regardless of whether class meets that day). Calling
+  `week_holiday_notes` directly with `CLASS_WEEKDAYS` omitted keeps
+  scanning every day, unfiltered; calling `class_weekdays` itself
+  without a `WEEK` argument reproduces the old whole-course behavior
+  (every row that ever meets a given weekday counts, in any week).
 - **Source-repo links instead of built-PDF links** (`cli readme` only)
   — a course whose calendar table should link straight at its own
   source (e.g. a `.tex` file on GitHub) rather than a built PDF variant.

@@ -322,6 +322,37 @@ EOF
     assert_not_contains "CAL_OCCASION_COLOR unset: no color on the occasion label" \
         "$out" "font-weight:600;color:"
 
+    # LABELS_FILE's own optional 4th field overrides CAL_OCCASION_COLOR
+    # per-row -- lets one occasion label (e.g. a real assessment) be
+    # colored while another (e.g. a plain label override) stays plain,
+    # even with CAL_OCCASION_COLOR left unset entirely. Real regression
+    # guard: cs1101s/course-materials needs exactly this (assessments
+    # colored orange, a plain reflection-week label left uncolored).
+    local occ_row_color_labels="$scratch/occ-row-color-labels.conf"
+    printf '2|lecture|Reading Assessment 1|#b34000\n3|lecture|Plain Override\n' > "$occ_row_color_labels"
+    local occ_row_color_kinds="$scratch/occ-row-color-kinds.conf"
+    printf 'lecture|Lecture|wed|-|L{n}|view,print|1|4|2,3\n' > "$occ_row_color_kinds"
+    out="$(render_html_calendar "$occ_row_color_kinds" 2026-08-10 3 0 /dev/null /dev/null \
+        "$occ_row_color_labels" /dev/null https://x /dev/null /dev/null)"
+    assert_contains "LABELS_FILE 4th field: this row's own color is applied" \
+        "$out" "font-weight:600;color:#b34000;\">Reading Assessment 1"
+    assert_contains "LABELS_FILE 4th field: a 3-field row with no color stays plain, even with a colored row elsewhere" \
+        "$out" "font-weight:600;\">Plain Override"
+    assert_not_contains "LABELS_FILE 4th field: the 3-field row's label doesn't inherit the other row's color" \
+        "$out" "font-weight:600;color:#b34000;\">Plain Override"
+
+    # The per-row color also wins over a palette-wide CAL_OCCASION_COLOR
+    # when both are set, and a row with no color of its own still falls
+    # back to the palette default -- not left uncolored just because
+    # some OTHER row in the file happens to specify a color.
+    local occ_row_color_palette='||||||||||#0b5fae'
+    out="$(render_html_calendar "$occ_row_color_kinds" 2026-08-10 3 0 /dev/null /dev/null \
+        "$occ_row_color_labels" /dev/null https://x /dev/null /dev/null "$occ_row_color_palette")"
+    assert_contains "LABELS_FILE 4th field wins over CAL_OCCASION_COLOR" \
+        "$out" "font-weight:600;color:#b34000;\">Reading Assessment 1"
+    assert_contains "no per-row color falls back to CAL_OCCASION_COLOR" \
+        "$out" "font-weight:600;color:#0b5fae;\">Plain Override"
+
     # SPECIAL_DATES_FILE/KEY_EVENTS_FILE (20th/21st params): merged into
     # the Notes column alongside the maintainer note and holiday notes,
     # mirroring render_markdown_calendar's own equivalent params.

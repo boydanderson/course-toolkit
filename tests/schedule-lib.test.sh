@@ -575,6 +575,37 @@ reflection||Reflection" "$out"
         "Wednesday,Friday,Monday,Tuesday" "$(class_weekdays "$cw_conf")"
     rm -f "$cw_conf"
 
+    # class_weekdays with a WEEK argument: a row that hasn't started yet
+    # that week (WEEK_START=2 here for studio) contributes no weekday at
+    # all for week 1 -- the real bug this guards against, a National Day
+    # holiday landing on week 1's Monday showing in Notes even though the
+    # studio (the only Monday-meeting kind) doesn't start until week 2.
+    local cw_ws_conf
+    cw_ws_conf="$(mktemp)"
+    {
+        printf 'lecture|Lecture|wed|A|L{n}{suffix}|view,print|1|13|-\n'
+        printf 'studio|Studio|mon|-|S{n}|none|2|13|-|-|tue\n'
+    } > "$cw_ws_conf"
+    assert_eq "class_weekdays WEEK=1: studio (WEEK_START=2) not eligible yet -> Monday/Tuesday excluded" \
+        "Wednesday" "$(class_weekdays "$cw_ws_conf" 1)"
+    assert_eq "class_weekdays WEEK=2: studio now eligible -> Monday/Tuesday included" \
+        "Wednesday,Monday,Tuesday" "$(class_weekdays "$cw_ws_conf" 2)"
+    assert_eq "class_weekdays with no WEEK argument: whole-course behavior unchanged, includes every row regardless of WEEK_START" \
+        "Wednesday,Monday,Tuesday" "$(class_weekdays "$cw_ws_conf")"
+    rm -f "$cw_ws_conf"
+
+    # class_weekdays WEEK also respects EXCLUDE_WEEKS (9th field): a row
+    # excluded THIS specific week contributes no weekday either, even
+    # though it's within its own WEEK_START..WEEK_END range.
+    local cw_ew_conf
+    cw_ew_conf="$(mktemp)"
+    printf 'reflection|Reflection|thu|-|R{n}|none|1|13|7\n' > "$cw_ew_conf"
+    assert_eq "class_weekdays WEEK=7: row's own EXCLUDE_WEEKS entry excludes it" \
+        "" "$(class_weekdays "$cw_ew_conf" 7)"
+    assert_eq "class_weekdays WEEK=6: same row, not excluded this week" \
+        "Thursday" "$(class_weekdays "$cw_ew_conf" 6)"
+    rm -f "$cw_ew_conf"
+
     local cw_empty
     cw_empty="$(mktemp)"
     printf '# nothing here yet\n\n' > "$cw_empty"

@@ -615,8 +615,8 @@ kind_suffixes() {
     done < <(grep -vE '^\s*#|^\s*$' "$conf_file")
 }
 
-# class_weekdays CONF_FILE -> comma-separated distinct weekday FULL
-# NAMES (e.g. "Monday,Wednesday,Thursday,Friday" -- day_of_week_name's
+# class_weekdays CONF_FILE [WEEK] -> comma-separated distinct weekday
+# FULL NAMES (e.g. "Monday,Wednesday,Thursday,Friday" -- day_of_week_name's
 # own vocabulary, so a caller can compare directly against a date's own
 # day name with no extra conversion) that some session-kind row actually
 # meets on -- its own WEEKDAY, plus any CANCEL_EXTRA_WEEKDAYS day (a
@@ -627,12 +627,28 @@ kind_suffixes() {
 # noting every calendar holiday regardless of whether this course ever
 # meets that day at all (e.g. a Sunday holiday when no kind ever meets
 # on Sunday).
+#
+# WEEK (optional): when given, a row that isn't actually eligible THIS
+# teaching week (WEEK < its WEEK_START, WEEK > its WEEK_END, or WEEK is
+# one of its EXCLUDE_WEEKS) contributes no weekday at all, even though it
+# meets that weekday in other weeks -- e.g. a studio with WEEK_START=2
+# shouldn't make Monday count as "a class day" for week 1's own holiday
+# scan, since the studio hasn't started yet that week. Omitting WEEK
+# reproduces today's exact whole-course behavior (every row that EVER
+# meets a given weekday counts, regardless of which week is being asked
+# about), so every existing caller is unaffected.
 class_weekdays() {
-    local conf_file="$1"
+    local conf_file="$1" week="${2:-}"
     local k l w s sp v ws we ew dl cew rest seen="" wd_full
     while IFS='|' read -r k l w s sp v ws we ew dl cew rest; do
         [ -z "$k" ] && continue
         case "$k" in \#*) continue ;; esac
+        if [ -n "$week" ]; then
+            if [ "$week" -lt "$ws" ] || [ "$week" -gt "$we" ]; then continue; fi
+            if [ -n "$ew" ] && [ "$ew" != "-" ]; then
+                case ",${ew}," in *",${week},"*) continue ;; esac
+            fi
+        fi
         wd_full="$(weekday_full_name "$w")" || wd_full=""
         if [ -n "$wd_full" ]; then
             case ",${seen}," in *",${wd_full},"*) : ;; *) seen="${seen:+$seen,}$wd_full" ;; esac

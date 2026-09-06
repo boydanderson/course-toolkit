@@ -76,14 +76,36 @@ compose_slot_title() {
 # one-off in-class-only session, never a real slot) -- generalizes
 # cs1101s/course-materials' config/slot-label-overrides.conf (WEEK|
 # COLUMN|LABEL) to use a session kind's own id instead of a fixed
-# studio/wed/thu/fri column vocabulary.
+# studio/wed/thu/fri column vocabulary. LABELS_FILE rows may carry an
+# optional 4th field (a per-label color, see slot_kind_label_color
+# below) -- this function only ever returns field 3, so a 3-field row
+# (no color) and a 4-field row (with one) both give back the same plain
+# label text, unaffected by whether a color is set.
 slot_kind_label() {
     local week="$1" kind_id="$2" labels_file="$3"
     [ -f "$labels_file" ] || return 0
     awk -F'|' -v w="$week" -v k="$kind_id" '
         /^[[:space:]]*#/ { next }
         /^[[:space:]]*$/ { next }
-        $1==w && $2==k { sub(/^[^|]*\|[^|]*\|/, ""); print; exit }
+        $1==w && $2==k { print $3; exit }
+    ' "$labels_file"
+}
+
+# slot_kind_label_color WEEK KIND_ID LABELS_FILE -> the optional 4th
+# field of a slot_kind_label row (a CSS color for that specific
+# occasion label), empty if the row has no 4th field or doesn't exist.
+# render_kind_cell_html falls back to the palette's CAL_OCCASION_COLOR
+# when this is empty -- lets a course color one occasion label (e.g. a
+# real assessment) without coloring every occasion label the same way
+# (e.g. a plain reflection override that was never meant to be
+# colored) the way a single palette-wide color alone could.
+slot_kind_label_color() {
+    local week="$1" kind_id="$2" labels_file="$3"
+    [ -f "$labels_file" ] || return 0
+    awk -F'|' -v w="$week" -v k="$kind_id" '
+        /^[[:space:]]*#/ { next }
+        /^[[:space:]]*$/ { next }
+        $1==w && $2==k { print $4; exit }
     ' "$labels_file"
 }
 

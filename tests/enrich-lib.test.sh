@@ -38,6 +38,21 @@ test_enrich_lib() {
     assert_eq "slot_kind_label: match" "R7: Special" "$(slot_kind_label 7 reflection "$scratch/labels.conf")"
     assert_eq "slot_kind_label: no match is empty" "" "$(slot_kind_label 7 lecture "$scratch/labels.conf")"
 
+    # slot_kind_label / slot_kind_label_color -- optional 4th field: a
+    # row with a color still returns just its plain label text from
+    # slot_kind_label (the 4th field never leaks into the label), and
+    # slot_kind_label_color returns that field separately; a 3-field row
+    # (no color) gives an empty color, not an error.
+    printf '4|lecture-B|Reading Assessment 1|#b34000\n' > "$scratch/labels-color.conf"
+    assert_eq "slot_kind_label: 4-field row still returns only the label" \
+        "Reading Assessment 1" "$(slot_kind_label 4 lecture-B "$scratch/labels-color.conf")"
+    assert_eq "slot_kind_label_color: 4-field row returns its color" \
+        "#b34000" "$(slot_kind_label_color 4 lecture-B "$scratch/labels-color.conf")"
+    assert_eq "slot_kind_label_color: 3-field row (no color) is empty" \
+        "" "$(slot_kind_label_color 7 reflection "$scratch/labels.conf")"
+    assert_eq "slot_kind_label_color: no match is empty, not an error" \
+        "" "$(slot_kind_label_color 4 lecture-A "$scratch/labels-color.conf")"
+
     # week_note -- regression: the IFS='; ' multi-char join bug (was
     # silently dropping the space and producing "a;b" instead of "a; b")
     printf '3|first note\n3|second note\n' > "$scratch/notes.conf"

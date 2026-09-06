@@ -221,7 +221,12 @@ _occasion_links_html() {
 # WEEK|KIND_ID|... file. SUFFIX_FILTER (14th, optional) restricts rows
 # to just that one weekly occurrence, for a kind split into one column
 # per suffix (see render_html_calendar) -- with no filter (the merged-
-# column case), an occasion label (slot_kind_label) is checked
+# column case), an occasion label (slot_kind_label), optionally colored
+# per-row via LABELS_FILE's optional 4th field (see slot_kind_label_color;
+# falls back to the palette's CAL_OCCASION_COLOR when that field is
+# absent -- lets one occasion label be colored, e.g. a real assessment,
+# without coloring every occasion label the same way, e.g. a plain
+# label override that was never meant to stand out), is checked
 # UNCONDITIONALLY, not just when this kind has zero occurrences this
 # week (a real gap: a kind with several occurrences, like two lectures/
 # week, couldn't previously flag that just ONE of them was replaced by
@@ -312,7 +317,10 @@ render_kind_cell_html() {
     fi
     if [ -n "$occ_label" ] && { [ -z "$suffix_filter" ] || [ -z "$rows" ]; }; then
         local occ_style="font-weight:600;"
-        [ -n "$CAL_OCCASION_COLOR" ] && occ_style="${occ_style}color:${CAL_OCCASION_COLOR};"
+        local occ_color
+        occ_color="$(slot_kind_label_color "$week" "$label_key" "$labels_file")"
+        [ -z "$occ_color" ] && occ_color="$CAL_OCCASION_COLOR"
+        [ -n "$occ_color" ] && occ_style="${occ_style}color:${occ_color};"
         cell_html="<div style=\"${occ_style}\">$(echo "$occ_label" | _html_escape)</div>"
         local occ_raw occ_links_html
         occ_raw="$(occasion_links "$week" "$label_key" "$occasion_links_file")"
@@ -467,8 +475,6 @@ render_html_calendar() {
     local holiday_first="${23:-}" column_widths="${24:-}"
     [ -z "$today" ] && today="$(sgt_date '+%Y-%m-%d')"
     _calendar_palette "$palette"
-    local class_wds
-    class_wds="$(class_weekdays "$kinds_conf")"
 
     local -a col_kind col_suffix col_header
     local ck cs ch
@@ -589,9 +595,10 @@ render_html_calendar() {
             printf '<td style="%s">%s</td>' "$row_style" "$cell"
         done
         local -a note_parts=()
-        local maintainer_note holiday_note special_note key_event_note
+        local maintainer_note holiday_note special_note key_event_note class_wds
         maintainer_note="$(week_note "$teaching_week" "$notes_file")"
         [ -n "$maintainer_note" ] && note_parts+=("$maintainer_note")
+        class_wds="$(class_weekdays "$kinds_conf" "$teaching_week")"
         holiday_note="$(week_holiday_notes "$monday" "$holidays_file" "$emoji_file" "$class_wds")"
         [ -n "$holiday_note" ] && note_parts+=("$holiday_note")
         if [ -n "$special_dates_file" ]; then
