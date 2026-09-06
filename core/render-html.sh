@@ -446,6 +446,8 @@ render_html_calendar() {
     local holiday_first="${23:-}"
     [ -z "$today" ] && today="$(sgt_date '+%Y-%m-%d')"
     _calendar_palette "$palette"
+    local class_wds
+    class_wds="$(class_weekdays "$kinds_conf")"
 
     local -a col_kind col_suffix col_header
     local ck cs ch
@@ -560,7 +562,7 @@ render_html_calendar() {
         local maintainer_note holiday_note special_note key_event_note
         maintainer_note="$(week_note "$teaching_week" "$notes_file")"
         [ -n "$maintainer_note" ] && note_parts+=("$maintainer_note")
-        holiday_note="$(week_holiday_notes "$monday" "$holidays_file" "$emoji_file")"
+        holiday_note="$(week_holiday_notes "$monday" "$holidays_file" "$emoji_file" "$class_wds")"
         [ -n "$holiday_note" ] && note_parts+=("$holiday_note")
         if [ -n "$special_dates_file" ]; then
             special_note="$(week_special_date_notes "$monday" "$special_dates_file")"

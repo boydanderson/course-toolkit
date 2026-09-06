@@ -43,6 +43,31 @@ lecture|B|Friday (Lecture B)
 quiz||Quiz" "$out"
     rm -f "$ks_conf"
 
+    # Column ORDER follows file row order, not kind-grouped order -- a
+    # course can put a different kind's row physically BETWEEN two
+    # occurrences of another kind (e.g. Reflection sitting between
+    # Lecture A and Lecture B) and get exactly that column order, with
+    # no other config/code change needed.
+    local interleave_conf
+    interleave_conf="$(mktemp)"
+    {
+        printf 'lecture|Lecture|wed|A|L{n}{suffix}|view,print|1|13|-\n'
+        printf 'reflection|Reflection|thu|-|R{n}|none|1|13|-\n'
+        printf 'lecture|Lecture|fri|B|L{n}{suffix}|view,print|1|13|-\n'
+    } > "$interleave_conf"
+    out="$(kind_columns "$interleave_conf")"
+    assert_eq "kind_columns: Reflection's row sits between the two lecture rows in the file -> its column sits between them too" \
+        "lecture|A|Wednesday (Lecture A)
+reflection||Reflection
+lecture|B|Friday (Lecture B)" "$out"
+    # kind_suffixes itself is unaffected -- still returns lecture's own
+    # 2 rows correctly regardless of what's interleaved between them.
+    out="$(kind_suffixes "$interleave_conf" lecture)"
+    assert_eq "kind_suffixes: unaffected by an interleaved different-kind row between lecture's own rows" \
+        "A|wed|Lecture|
+B|fri|Lecture|" "$out"
+    rm -f "$interleave_conf"
+
     # DAY_LABEL (optional 10th field): overrides a split column's
     # weekday header for a course whose real session isn't pinned to one
     # fixed day (e.g. "Session 1, some day Mon-Wed") -- WEEKDAY still has
@@ -509,4 +534,28 @@ studio|B|Thu-Fri (Studio B)" "$out"
     assert_eq "PUBLIC_VARIANTS: set field 15 -> passed through as 11th output column" \
         "studio|Studio|S1|2026-08-10|mon|-|instructor,student||||student" "$out"
     rm -f "$pv_conf"
+
+    # class_weekdays: distinct weekday full names some kind actually
+    # meets on, including CANCEL_EXTRA_WEEKDAYS days (a multi-day
+    # session's extra days are real class days too, even though they're
+    # not that row's own "primary" WEEKDAY) -- used to filter
+    # week_holiday_notes down to days that could actually collide with a
+    # real class.
+    local cw_conf
+    cw_conf="$(mktemp)"
+    {
+        printf 'lecture|Lecture|wed|A|L{n}{suffix}|view,print|1|13|-\n'
+        printf 'lecture|Lecture|fri|B|L{n}{suffix}|view,print|1|13|-\n'
+        printf 'studio|Studio|mon|-|S{n}|none|1|13|-|-|tue\n'
+    } > "$cw_conf"
+    assert_eq "class_weekdays: WEEKDAY + CANCEL_EXTRA_WEEKDAYS, deduped, in first-appearance order" \
+        "Wednesday,Friday,Monday,Tuesday" "$(class_weekdays "$cw_conf")"
+    rm -f "$cw_conf"
+
+    local cw_empty
+    cw_empty="$(mktemp)"
+    printf '# nothing here yet\n\n' > "$cw_empty"
+    assert_eq "class_weekdays: comment-only conf yields no weekdays, not an error" \
+        "" "$(class_weekdays "$cw_empty")"
+    rm -f "$cw_empty"
 }

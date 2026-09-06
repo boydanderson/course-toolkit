@@ -603,7 +603,7 @@ kind_suffixes() {
     local conf_file="$1" kind_id="$2"
     local k l w s sp v ws we ew dl cew ashw hcw clf pv
     local seen=""
-    while IFS='|' read -r k l w s sp v ws we ew dl cew ashw hcw clf; do
+    while IFS='|' read -r k l w s sp v ws we ew dl cew ashw hcw clf pv; do
         [ -z "$k" ] && continue
         case "$k" in \#*) continue ;; esac
         [ "$k" = "$kind_id" ] || continue
@@ -611,6 +611,45 @@ kind_suffixes() {
         seen="${seen:+$seen,}$s"
         printf '%s|%s|%s|%s\n' "$s" "$w" "$l" "$dl"
     done < <(grep -vE '^\s*#|^\s*$' "$conf_file")
+}
+
+# class_weekdays CONF_FILE -> comma-separated distinct weekday FULL
+# NAMES (e.g. "Monday,Wednesday,Thursday,Friday" -- day_of_week_name's
+# own vocabulary, so a caller can compare directly against a date's own
+# day name with no extra conversion) that some session-kind row actually
+# meets on -- its own WEEKDAY, plus any CANCEL_EXTRA_WEEKDAYS day (a
+# multi-day session, e.g. a studio meeting Mon+Tue, genuinely has a
+# class on both days even though only one is the row's own "primary"
+# WEEKDAY). Used to filter a course-wide note (e.g. week_holiday_notes)
+# down to days that could actually collide with a real class, instead of
+# noting every calendar holiday regardless of whether this course ever
+# meets that day at all (e.g. a Sunday holiday when no kind ever meets
+# on Sunday).
+class_weekdays() {
+    local conf_file="$1"
+    local k l w s sp v ws we ew dl cew rest seen="" wd_full
+    while IFS='|' read -r k l w s sp v ws we ew dl cew rest; do
+        [ -z "$k" ] && continue
+        case "$k" in \#*) continue ;; esac
+        wd_full="$(weekday_full_name "$w")" || wd_full=""
+        if [ -n "$wd_full" ]; then
+            case ",${seen}," in *",${wd_full},"*) : ;; *) seen="${seen:+$seen,}$wd_full" ;; esac
+        fi
+        if [ -n "$cew" ] && [ "$cew" != "-" ]; then
+            local extra_wd
+            local IFS_SAVE="$IFS"
+            IFS=','
+            for extra_wd in $cew; do
+                IFS="$IFS_SAVE"
+                wd_full="$(weekday_full_name "$extra_wd")" || wd_full=""
+                if [ -n "$wd_full" ]; then
+                    case ",${seen}," in *",${wd_full},"*) : ;; *) seen="${seen:+$seen,}$wd_full" ;; esac
+                fi
+            done
+            IFS="$IFS_SAVE"
+        fi
+    done < <(grep -vE '^\s*#|^\s*$' "$conf_file")
+    echo "$seen"
 }
 
 # _capitalize WORD -> WORD with its first character upper-cased (e.g.
@@ -643,12 +682,29 @@ _capitalize() {
 # name one concrete day for the schedule engine's own date math, but the
 # column header can say "Mon-Wed" instead of asserting a specific day
 # that isn't actually fixed).
+#
+# Column ORDER is driven purely by CONF_FILE's own row order: each
+# (KIND_ID, SUFFIX) pair's column appears at the position of that row's
+# first occurrence in the file, not grouped by KIND_ID first. A course
+# whose two lecture rows (wed/A, fri/B) happen to sit next to each other
+# in the file gets those two columns adjacent, same as always -- but a
+# course that wants a different kind's column physically BETWEEN two
+# occurrences of another kind (e.g. Reflection sitting between Lecture A
+# and Lecture B, matching a real timetable's own left-to-right order)
+# gets exactly that by writing session-kinds.conf's rows in that visual
+# order, no other config or code change needed. render_markdown_calendar/
+# render_html_calendar already call render_kind_cell/render_kind_cell_html
+# once per column independently (no assumption that a kind's own columns
+# stay contiguous), so this needs no change on the rendering side.
 kind_columns() {
     local conf_file="$1"
-    local -a kind_ids
-    while IFS= read -r k; do kind_ids+=("$k"); done < <(session_kind_ids "$conf_file")
-    local k
-    for k in "${kind_ids[@]}"; do
+    local k l w s rest seen=""
+    while IFS='|' read -r k l w s rest; do
+        [ -z "$k" ] && continue
+        case "$k" in \#*) continue ;; esac
+        local key="${k}|${s}"
+        case ",${seen}," in *",${key},"*) continue ;; esac
+        seen="${seen:+$seen,}$key"
         local -a suf_lines=()
         while IFS= read -r line; do [ -n "$line" ] && suf_lines+=("$line"); done < <(kind_suffixes "$conf_file" "$k")
         if [ "${#suf_lines[@]}" -le 1 ]; then
@@ -657,6 +713,7 @@ kind_columns() {
             local sl suf wd lbl dl wd_full
             for sl in "${suf_lines[@]}"; do
                 IFS='|' read -r suf wd lbl dl <<< "$sl"
+                [ "$suf" = "$s" ] || continue
                 if [ -n "$dl" ]; then
                     wd_full="$dl"
                 else
@@ -665,7 +722,7 @@ kind_columns() {
                 printf '%s|%s|%s (%s %s)\n' "$k" "$suf" "$wd_full" "$lbl" "$suf"
             done
         fi
-    done
+    done < <(grep -vE '^\s*#|^\s*$' "$conf_file")
 }
 
 # session_kind_ids CONF_FILE -> the distinct KIND_IDs declared, in

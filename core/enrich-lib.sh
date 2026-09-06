@@ -158,23 +158,34 @@ holiday_emoji() {
     ' "$emoji_file"
 }
 
-# week_holiday_notes MONDAY HOLIDAYS_FILE EMOJI_FILE -> "⚠️ <Weekday>:
-# <emoji> <Holiday>" for every day Monday..Sunday of the calendar week
-# starting MONDAY that has a HOLIDAYS_FILE entry, semicolon-joined --
-# empty if none. is_holiday's per-occurrence cancellation (above) only
-# surfaces a holiday when it lands exactly on a day this course actually
-# has a scheduled occurrence; this instead scans the whole week so a
-# holiday landing on a day the course never meets (e.g. a Tuesday) still
-# shows up somewhere. Scans all 7 days, not just Mon-Fri, since a course
-# may schedule a real occurrence on a weekend (e.g. a Saturday quiz).
+# week_holiday_notes MONDAY HOLIDAYS_FILE EMOJI_FILE [CLASS_WEEKDAYS] ->
+# "⚠️ <Weekday>: <emoji> <Holiday>" for every day Monday..Sunday of the
+# calendar week starting MONDAY that has a HOLIDAYS_FILE entry,
+# semicolon-joined -- empty if none. is_holiday's per-occurrence
+# cancellation (above) only surfaces a holiday when it lands exactly on
+# a day this course actually has a scheduled occurrence; this instead
+# scans the whole week so a holiday landing on a day the course never
+# meets (e.g. a Tuesday) still shows up somewhere -- UNLESS
+# CLASS_WEEKDAYS (optional, comma-separated weekday tokens, e.g. from
+# schedule-lib.sh's class_weekdays) is given, in which case a day not in
+# that set is skipped entirely: a holiday that can't possibly interfere
+# with any class (e.g. Deepavali landing on a Sunday when no kind ever
+# meets Sunday) isn't worth a Notes-column line. Unset/empty
+# CLASS_WEEKDAYS keeps today's exact existing behavior (every day
+# scanned) -- fully backward compatible for every current caller. Scans
+# all 7 days, not just Mon-Fri, since a course may schedule a real
+# occurrence on a weekend (e.g. a Saturday quiz).
 week_holiday_notes() {
-    local monday="$1" holidays_file="$2" emoji_file="$3"
+    local monday="$1" holidays_file="$2" emoji_file="$3" class_weekdays="${4:-}"
     [ -f "$holidays_file" ] || return 0
     local lines=() i date dow holiday emoji prefix
     for ((i = 0; i < 7; i++)); do
         date="$(add_days "$monday" "$i")"
         holiday="$(is_holiday "$date" "$holidays_file")" || continue
         dow="$(day_of_week_name "$date")"
+        if [ -n "$class_weekdays" ]; then
+            case ",${class_weekdays}," in *",${dow},"*) ;; *) continue ;; esac
+        fi
         emoji="$(holiday_emoji "$holiday" "$emoji_file")"
         prefix=""
         [ -n "$emoji" ] && prefix="${emoji} "

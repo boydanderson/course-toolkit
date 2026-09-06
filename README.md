@@ -87,6 +87,20 @@ for every renderer-specific step.
   `cli canvas` — no separate opt-in, just however many rows a `KIND_ID`
   has in `session-kinds.conf`.
 
+  **Column order** follows `session-kinds.conf`'s own row order, not a
+  kind-grouped order — each `(KIND_ID, SUFFIX)` pair's column sits at
+  the position of that row's *first* appearance in the file. Two
+  occurrences of the same kind that happen to sit next to each other in
+  the file (the common case) get adjacent columns, same as always — but
+  a course that wants a different kind's column physically *between*
+  two occurrences of another kind (e.g. Reflection sitting between
+  Lecture A and Lecture B, matching a real timetable's own left-to-right
+  layout) gets exactly that just by writing the rows in that visual
+  order, no other config or code change needed. `kind_suffixes` (which
+  `kind_columns` still calls to build each occurrence's own header) is
+  unaffected either way — it keeps returning a kind's rows correctly
+  regardless of what's interleaved between them in the file.
+
   **Recess row**: when `RECESS_AFTER_WEEK` (see `config/course.mk` below)
   is nonzero, both renderers also insert a "Recess" row (dashes in every
   column, a "🏖️ Recess Week - No classes (dates)" note) between that
@@ -270,6 +284,21 @@ existing course's output is completely unaffected by their existence:
   (maintainer note, holidays, special dates, key events), not
   interleaved by day. See `core/enrich-lib.sh`'s
   `week_special_date_notes`/`week_key_event_notes`.
+
+  Holiday notes are also filtered down to days that could actually
+  collide with a real class: `render_markdown_calendar`/
+  `render_html_calendar` compute `schedule-lib.sh`'s `class_weekdays`
+  from `session-kinds.conf` (every `WEEKDAY` plus every
+  `CANCEL_EXTRA_WEEKDAYS` day) and pass it to `week_holiday_notes` as
+  its optional `CLASS_WEEKDAYS` argument — a holiday landing on a day
+  no kind ever meets (e.g. a Sunday holiday for a Mon/Wed/Thu/Fri
+  course) is skipped entirely instead of noted, since it can't possibly
+  interfere with any class. This is the current default for both
+  renderers, applied uniformly to every course; special dates and key
+  events are deliberately **not** filtered this way (a Key Event like a
+  final exam is worth noting regardless of whether class meets that
+  day). Calling `week_holiday_notes` directly with `CLASS_WEEKDAYS`
+  omitted keeps scanning every day, unfiltered.
 - **Source-repo links instead of built-PDF links** (`cli readme` only)
   — a course whose calendar table should link straight at its own
   source (e.g. a `.tex` file on GitHub) rather than a built PDF variant.

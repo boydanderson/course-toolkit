@@ -477,6 +477,8 @@ render_markdown_calendar() {
     local extra_slots_file="${16:-}"
     local special_dates_file="${17:-}" key_events_file="${18:-}"
     local source_links_file="${19:-}" holiday_first="${20:-}"
+    local class_wds
+    class_wds="$(class_weekdays "$kinds_conf")"
 
     local -a col_kind col_suffix col_header
     local ck cs ch
@@ -530,7 +532,7 @@ render_markdown_calendar() {
         local maintainer_note holiday_note special_note key_event_note
         maintainer_note="$(week_note "$teaching_week" "$notes_file")"
         [ -n "$maintainer_note" ] && note_parts+=("$maintainer_note")
-        holiday_note="$(week_holiday_notes "$monday" "$holidays_file" "$emoji_file")"
+        holiday_note="$(week_holiday_notes "$monday" "$holidays_file" "$emoji_file" "$class_wds")"
         [ -n "$holiday_note" ] && note_parts+=("$holiday_note")
         if [ -n "$special_dates_file" ]; then
             special_note="$(week_special_date_notes "$monday" "$special_dates_file")"

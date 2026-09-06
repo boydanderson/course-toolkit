@@ -114,6 +114,19 @@ EOF
     assert_contains "released slot still gets a real <a> link" \
         "$out" '<a href="https://example.org/pdfs/lecture-L1A.view.pdf">View</a>'
 
+    # Column order follows file row order: Reflection's row sits
+    # physically between the two lecture rows -> its column does too.
+    local kinds_interleave="$scratch/session-kinds-interleave.conf"
+    printf 'lecture|Lecture|wed|A|L{n}{suffix}|view,print|1|13|-\n' > "$kinds_interleave"
+    printf 'reflection|Reflection|thu|-|R{n}|none|1|13|-\n' >> "$kinds_interleave"
+    printf 'lecture|Lecture|fri|B|L{n}{suffix}|view,print|1|13|-\n' >> "$kinds_interleave"
+    local interleave_out headers_only
+    interleave_out="$(render_html_calendar "$kinds_interleave" 2026-08-10 1 0 "$titles" "$allowlist2" \
+        /dev/null /dev/null https://example.org/pdfs /dev/null /dev/null)"
+    headers_only="$(echo "$interleave_out" | tr -d '\n' | grep -o '<thead>.*</thead>')"
+    assert_contains "column order follows file row order: Reflection's <th> sits between the two lecture <th>s" \
+        "$headers_only" "Wednesday (Lecture A)</th><th style=\"border:1px solid #dddddd;padding:6px 8px;background:#eeeeee;text-align:left;vertical-align:top;\">Reflection</th><th style=\"border:1px solid #dddddd;padding:6px 8px;background:#eeeeee;text-align:left;vertical-align:top;\">Friday (Lecture B)"
+
     # GRADED_FILE (17th positional arg): marks a real occurrence's title
     # with a "🔴 " prefix.
     local graded="$scratch/graded.conf"
@@ -582,25 +595,36 @@ EOF
         "$out" "No Studio"
     assert_contains "the occurrence still renders normally" "$out" "S1"
 
-    # week_holiday_notes wired into the Notes column: a holiday landing
-    # on a day this kind doesn't meet (kinds is wed-only; Thursday isn't)
-    # must still surface in Notes -- same real gap render-markdown.test.sh
-    # covers, HTML side.
+    # week_holiday_notes wired into the Notes column, filtered by
+    # class_weekdays (kinds is wed-only): a holiday on a REAL class day
+    # (Wednesday) still surfaces in Notes, but a holiday on a day this
+    # course never meets at all (Thursday) is filtered out instead of
+    # shown -- reversed from this test's own original design, per a
+    # maintainer request that noting every calendar holiday regardless
+    # of whether any class could collide with it is pure noise. Same
+    # change render-markdown.test.sh covers, HTML side.
     local nonclass_holidays="$scratch/nonclass-holidays.conf"
     printf '2026-08-13|Non-Class Holiday\n' > "$nonclass_holidays"
     out="$(render_html_calendar "$kinds" 2026-08-10 1 0 "$titles" "$allowlist" \
         /dev/null /dev/null https://example.org/pdfs "$nonclass_holidays" "$emoji")"
-    assert_contains "a holiday on a non-class day still shows in Notes" \
-        "$out" "⚠️ Thursday: Non-Class Holiday"
+    assert_not_contains "a holiday on a day this course never meets is filtered out of Notes" \
+        "$out" "Non-Class Holiday"
     assert_contains "a holiday on a non-class day doesn't cancel any occurrence" \
         "$out" "L1A"
+
+    local classday_holidays="$scratch/classday-holidays.conf"
+    printf '2026-08-12|Class-Day Holiday\n' > "$classday_holidays"
+    out="$(render_html_calendar "$kinds" 2026-08-10 1 0 "$titles" "$allowlist" \
+        /dev/null /dev/null https://example.org/pdfs "$classday_holidays" "$emoji")"
+    assert_contains "a holiday on a real class day (Wednesday) still shows in Notes" \
+        "$out" "⚠️ Wednesday: Class-Day Holiday"
 
     local week_notes_file="$scratch/week-notes.conf"
     printf '1|Maintainer note\n' > "$week_notes_file"
     out="$(render_html_calendar "$kinds" 2026-08-10 1 0 "$titles" "$allowlist" \
-        /dev/null "$week_notes_file" https://example.org/pdfs "$nonclass_holidays" "$emoji")"
+        /dev/null "$week_notes_file" https://example.org/pdfs "$classday_holidays" "$emoji")"
     assert_contains "maintainer note and holiday note join with '; '" \
-        "$out" "Maintainer note; ⚠️ Thursday: Non-Class Holiday"
+        "$out" "Maintainer note; ⚠️ Wednesday: Class-Day Holiday"
 
     rm -rf "$scratch"
 }

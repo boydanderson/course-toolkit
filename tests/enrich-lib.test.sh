@@ -155,6 +155,22 @@ EOF
         "⚠️ Tuesday: Not Mapped Holiday" \
         "$(week_holiday_notes 2026-10-05 "$scratch/unmapped-holiday.conf" "$scratch/emoji.conf")"
 
+    # CLASS_WEEKDAYS (optional 4th arg, e.g. from schedule-lib.sh's
+    # class_weekdays): filters a day out of the scan entirely unless it's
+    # in the given set. Omitted/empty (every test above) keeps scanning
+    # all 7 days, unchanged.
+    assert_eq "week_holiday_notes: CLASS_WEEKDAYS unset scans every day (backward compat)" \
+        "⚠️ Friday: 🧘 NUS Well-Being Day" \
+        "$(week_holiday_notes 2026-10-05 "$scratch/holidays.conf" "$scratch/emoji.conf" "")"
+    assert_eq "week_holiday_notes: CLASS_WEEKDAYS set, holiday's day not in it -> filtered out" \
+        "" "$(week_holiday_notes 2026-10-05 "$scratch/holidays.conf" "$scratch/emoji.conf" "Monday,Wednesday")"
+    assert_eq "week_holiday_notes: CLASS_WEEKDAYS set, holiday's day IS in it -> still shows" \
+        "⚠️ Friday: 🧘 NUS Well-Being Day" \
+        "$(week_holiday_notes 2026-10-05 "$scratch/holidays.conf" "$scratch/emoji.conf" "Monday,Friday")"
+    assert_eq "week_holiday_notes: CLASS_WEEKDAYS filters one of two holidays, keeps the other" \
+        "⚠️ Friday: 🧘 NUS Well-Being Day" \
+        "$(week_holiday_notes 2026-10-05 "$scratch/multi-holidays.conf" "$scratch/emoji.conf" "Friday")"
+
     # week_special_date_notes -- same DATE|NAME shape and Mon..Sun scan
     # as week_holiday_notes, no emoji lookup.
     printf '2026-10-06|Reading Week Begins\n' > "$scratch/special-dates.conf"

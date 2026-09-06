@@ -23,6 +23,17 @@ test_render_markdown() {
     assert_not_contains "unreleased slot has no markdown link syntax for itself" \
         "$(echo "$out" | grep '| 4 |')" "[View](https://example.org/pdfs/lecture-L4B"
 
+    # Column order follows file row order: Reflection's row sits
+    # physically between the two lecture rows -> its column does too.
+    local kinds_interleave="$scratch/session-kinds-interleave.conf"
+    printf 'lecture|Lecture|wed|A|L{n}{suffix}|view,print|1|13|-\n' > "$kinds_interleave"
+    printf 'reflection|Reflection|thu|-|R{n}|none|1|13|-\n' >> "$kinds_interleave"
+    printf 'lecture|Lecture|fri|B|L{n}{suffix}|view,print|1|13|-\n' >> "$kinds_interleave"
+    out="$(render_markdown_calendar "$kinds_interleave" 2026-08-10 4 0 "$titles" "$allowlist" \
+        /dev/null /dev/null https://example.org/pdfs /dev/null /dev/null)"
+    assert_contains "column order follows file row order: Reflection sits between the two lecture columns" \
+        "$out" "| Week | Wednesday (Lecture A) | Reflection | Friday (Lecture B) | Notes |"
+
     # GRADED_FILE (15th positional arg): marks a real occurrence's title
     # with a "🔴 " prefix.
     local graded="$scratch/graded.conf"
@@ -386,41 +397,57 @@ EOF
     assert_contains "render_markdown_calendar: the merged entry shows both slots" \
         "$week3_row_es" "S3-in-class: "
 
-    # week_holiday_notes wired into the Notes column: a holiday that
-    # lands on a day this kind doesn't meet (kinds is wed/fri; Thursday
-    # is neither) must still surface in Notes, not silently disappear
-    # the way is_holiday's per-occurrence cancellation alone would leave
-    # it -- the real gap this was built to close.
+    # week_holiday_notes wired into the Notes column, filtered by
+    # class_weekdays (kinds is wed/fri): a holiday on a REAL class day
+    # (Wednesday) still surfaces in Notes even in a week/column where it
+    # doesn't happen to cancel anything, not silently disappearing the
+    # way is_holiday's per-occurrence cancellation alone would leave it
+    # -- but a holiday on a day this course never meets at all (Thursday
+    # -- reversed from this test's own original design: a maintainer
+    # asked for exactly this suppression, since noting every calendar
+    # holiday regardless of whether any class could ever collide with it
+    # is pure noise) is now filtered out instead of shown.
     local nonclass_holidays="$scratch/nonclass-holidays.conf"
     printf '2026-08-13|Non-Class Holiday\n' > "$nonclass_holidays"
     out="$(render_markdown_calendar "$kinds" 2026-08-10 1 0 "$titles" "$allowlist" \
         /dev/null /dev/null https://example.org/pdfs "$nonclass_holidays" "$emoji")"
-    assert_contains "a holiday on a non-class day still shows in Notes" \
-        "$out" "⚠️ Thursday: Non-Class Holiday"
+    assert_not_contains "a holiday on a day this course never meets is filtered out of Notes" \
+        "$out" "Non-Class Holiday"
     assert_contains "a holiday on a non-class day doesn't cancel any occurrence" \
         "$out" "L1A"
+
+    local classday_holidays="$scratch/classday-holidays.conf"
+    printf '2026-08-12|Class-Day Holiday\n' > "$classday_holidays"
+    out="$(render_markdown_calendar "$kinds" 2026-08-10 1 0 "$titles" "$allowlist" \
+        /dev/null /dev/null https://example.org/pdfs "$classday_holidays" "$emoji")"
+    assert_contains "a holiday on a real class day (Wednesday) still shows in Notes" \
+        "$out" "⚠️ Wednesday: Class-Day Holiday"
 
     # Joins with an existing maintainer week_note via "; ", same
     # separator week_note itself already uses for multiple lines.
     local week_notes_file="$scratch/week-notes.conf"
     printf '1|Maintainer note\n' > "$week_notes_file"
     out="$(render_markdown_calendar "$kinds" 2026-08-10 1 0 "$titles" "$allowlist" \
-        /dev/null "$week_notes_file" https://example.org/pdfs "$nonclass_holidays" "$emoji")"
+        /dev/null "$week_notes_file" https://example.org/pdfs "$classday_holidays" "$emoji")"
     assert_contains "maintainer note and holiday note join with '; '" \
-        "$out" "Maintainer note; ⚠️ Thursday: Non-Class Holiday"
+        "$out" "Maintainer note; ⚠️ Wednesday: Class-Day Holiday"
 
     # All four Notes categories together, in fixed order (maintainer,
     # holiday, special date, key event) -- SPECIAL_DATES_FILE (17th) and
-    # KEY_EVENTS_FILE (18th) are new optional trailing params.
+    # KEY_EVENTS_FILE (18th) are new optional trailing params. Special
+    # dates/key events are NOT filtered by class_weekdays (only holidays
+    # are -- a Key Event like a final exam is worth noting regardless of
+    # whether class meets that day), so Tuesday's special date still
+    # shows even though Tuesday isn't a class day in this fixture.
     local special_dates_file="$scratch/special-dates.conf"
     printf '2026-08-11|Special Day\n' > "$special_dates_file"
     local key_events_file="$scratch/key-events.conf"
     printf '2026-08-12|10:00|12:00|Info Session\n' > "$key_events_file"
     out="$(render_markdown_calendar "$kinds" 2026-08-10 1 0 "$titles" "$allowlist" \
-        /dev/null "$week_notes_file" https://example.org/pdfs "$nonclass_holidays" "$emoji" \
+        /dev/null "$week_notes_file" https://example.org/pdfs "$classday_holidays" "$emoji" \
         "" "" "" "" "" "$special_dates_file" "$key_events_file")"
     assert_contains "all four Notes categories combine in the fixed order" \
-        "$out" "Maintainer note; ⚠️ Thursday: Non-Class Holiday; 📅 Tuesday: Special Day; 📌 Wednesday: Info Session (10:00-12:00)"
+        "$out" "Maintainer note; ⚠️ Wednesday: Class-Day Holiday; 📅 Tuesday: Special Day; 📌 Wednesday: Info Session (10:00-12:00)"
 
     # Backward compat: omitting SPECIAL_DATES_FILE/KEY_EVENTS_FILE
     # entirely still behaves exactly as before Part A.
