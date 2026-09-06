@@ -97,6 +97,7 @@ _calendar_palette() {
     CAL_OCCASION_COLOR="${p[10]:-}"
     CAL_CURRENT_WEEK_BG="${p[11]:-$CAL_CURRENT_BG}"
     CAL_WEEK_BG="${p[12]:-}"
+    CAL_RECESS_BG="${p[13]:-}"
 }
 
 # _html_variant_links KIND_ID SLOT_ID VARIANTS BASE_URL RELEASED [PALETTE]
@@ -438,6 +439,13 @@ render_kind_cell_html() {
 # (every week, not just the current one) -- off by default, so a course
 # that doesn't set it sees no change. HOLIDAY_FIRST (23rd, optional) --
 # see render_kind_cell_html's own comment; threads straight through.
+# COLUMN_WIDTHS (24th, optional, comma-separated CSS width values -- one
+# per column in render order: Week, then each kind column, then Notes)
+# emits a `<colgroup>` right after `<table>`, e.g. "7%,18%,22%,18%,22%,13%"
+# for a 4-kind-column course. Unset (the default) omits the `<colgroup>`
+# entirely, leaving column widths to the browser -- today's exact
+# existing behavior for every course that's never needed explicit
+# proportions.
 render_html_calendar() {
     local kinds_conf="$1" start_monday="$2" num_weeks="$3" recess_after="$4"
     local titles_file="$5" allowlist_file="$6" labels_file="$7" notes_file="$8"
@@ -447,7 +455,7 @@ render_html_calendar() {
     local occasion_links_file="${16:-}" graded_file="${17:-}"
     local extra_slots_file="${18:-}" extra_note_file="${19:-}"
     local special_dates_file="${20:-}" key_events_file="${21:-}" show_week_dates="${22:-}"
-    local holiday_first="${23:-}"
+    local holiday_first="${23:-}" column_widths="${24:-}"
     [ -z "$today" ] && today="$(sgt_date '+%Y-%m-%d')"
     _calendar_palette "$palette"
     local class_wds
@@ -465,6 +473,17 @@ render_html_calendar() {
     local td_style="border:1px solid ${CAL_BORDER};padding:6px 8px;vertical-align:top;"
 
     echo '<table style="border-collapse:collapse;width:100%;font-size:0.9rem;margin-top:1rem;">'
+    if [ -n "$column_widths" ]; then
+        local cols_html="" cw
+        local IFS_SAVE_CW="$IFS"
+        IFS=','
+        for cw in $column_widths; do
+            IFS="$IFS_SAVE_CW"
+            cols_html="${cols_html}<col style=\"width:${cw}\">"
+        done
+        IFS="$IFS_SAVE_CW"
+        echo "<colgroup>${cols_html}</colgroup>"
+    fi
     echo '<thead><tr>'
     printf '<th style="%s">Week</th>' "$th_style"
     local i
@@ -486,9 +505,11 @@ render_html_calendar() {
     while IFS='|' read -r teaching_week monday; do
         if [ -n "$recess_monday" ] && [ "$teaching_week" -eq "$((recess_after + 1))" ]; then
             local recess_colspan=$((${#col_kind[@]} + 2))
+            local recess_bg_style=""
+            [ -n "$CAL_RECESS_BG" ] && recess_bg_style="background:${CAL_RECESS_BG};"
             echo '<tr>'
-            printf '<td colspan="%d" style="%stext-align:center;font-style:italic;color:%s;">🏖️ Recess Week - No classes (%s - %s)</td>' \
-                "$recess_colspan" "$td_style" "$CAL_CANCELLED" "$recess_monday" "$recess_friday"
+            printf '<td colspan="%d" style="%s%stext-align:center;font-style:italic;color:%s;">🏖️ Recess Week - No classes (%s - %s)</td>' \
+                "$recess_colspan" "$td_style" "$recess_bg_style" "$CAL_NOTES" "$recess_monday" "$recess_friday"
             echo '</tr>'
         fi
 

@@ -31,10 +31,10 @@ test_schedule_lib() {
     } > "$ks_conf"
     out="$(kind_suffixes "$ks_conf" lecture)"
     assert_eq "kind_suffixes: lecture has 2 rows, in file order" \
-        "A|wed|Lecture|
-B|fri|Lecture|" "$out"
+        "A|wed|Lecture||
+B|fri|Lecture||" "$out"
     out="$(kind_suffixes "$ks_conf" quiz)"
-    assert_eq "kind_suffixes: a single-occurrence kind has exactly one row" "-|sat|Quiz|" "$out"
+    assert_eq "kind_suffixes: a single-occurrence kind has exactly one row" "-|sat|Quiz||" "$out"
 
     out="$(kind_columns "$ks_conf")"
     assert_eq "kind_columns: a multi-occurrence kind splits, a single one doesn't" \
@@ -64,8 +64,8 @@ lecture|B|Friday (Lecture B)" "$out"
     # 2 rows correctly regardless of what's interleaved between them.
     out="$(kind_suffixes "$interleave_conf" lecture)"
     assert_eq "kind_suffixes: unaffected by an interleaved different-kind row between lecture's own rows" \
-        "A|wed|Lecture|
-B|fri|Lecture|" "$out"
+        "A|wed|Lecture||
+B|fri|Lecture||" "$out"
     rm -f "$interleave_conf"
 
     # DAY_LABEL (optional 10th field): overrides a split column's
@@ -80,8 +80,8 @@ B|fri|Lecture|" "$out"
     } > "$dl_conf"
     out="$(kind_suffixes "$dl_conf" studio)"
     assert_eq "kind_suffixes: DAY_LABEL passes through as the 4th field" \
-        "A|mon|Studio|Mon-Wed
-B|thu|Studio|Thu-Fri" "$out"
+        "A|mon|Studio|Mon-Wed|
+B|thu|Studio|Thu-Fri|" "$out"
     out="$(kind_columns "$dl_conf")"
     assert_eq "kind_columns: DAY_LABEL overrides the header's weekday portion" \
         "studio|A|Mon-Wed (Studio A)
@@ -91,6 +91,29 @@ studio|B|Thu-Fri (Studio B)" "$out"
     assert_eq "week_occurrences still uses the real WEEKDAY for date math, not DAY_LABEL" \
         "2026-08-10" "$(week_occurrences "$dl_conf" 2026-08-10 1 | head -1 | cut -d'|' -f4)"
     rm -f "$dl_conf"
+
+    # HEADER_LABEL (optional 16th field): a full column-header override,
+    # replacing the computed default entirely (unlike DAY_LABEL, which
+    # only swaps the weekday portion within the fixed template) -- for a
+    # course whose real convention is worded/ordered differently, e.g.
+    # cs1101s/course-materials' own "Lecture (Wed)"/"Studio (Mon/Tue)"
+    # (Label-then-day, abbreviated, including a day annotation even on a
+    # single-occurrence kind).
+    local hl_conf
+    hl_conf="$(mktemp)"
+    {
+        printf 'lecture|Lecture|wed|A|L{n}{suffix}|none|1|13|-|-|-|-|-|-|-|Lecture (Wed)\n'
+        printf 'lecture|Lecture|fri|B|L{n}{suffix}|none|1|13|-|-|-|-|-|-|-|Lecture (Fri)\n'
+        printf 'studio|Studio|mon|-|S{n}|none|1|13|-|-|-|-|-|-|-|Studio (Mon/Tue)\n'
+        printf 'reflection|Reflection|thu|-|R{n}|none|1|13|-\n'
+    } > "$hl_conf"
+    out="$(kind_columns "$hl_conf")"
+    assert_eq "kind_columns: HEADER_LABEL fully overrides both a split kind's and a single-occurrence kind's header, unset rows keep the computed default" \
+        "lecture|A|Lecture (Wed)
+lecture|B|Lecture (Fri)
+studio||Studio (Mon/Tue)
+reflection||Reflection" "$out"
+    rm -f "$hl_conf"
 
     # Regression: a real bug found via epp2-toolkit-poc -- DAY_LABEL
     # (the 10th field) silently got absorbed into EXCLUDE_WEEKS by

@@ -592,24 +592,26 @@ weekday_full_name() {
 }
 
 # kind_suffixes CONF_FILE KIND_ID -> one line per distinct SUFFIX
-# declared for KIND_ID, in file order: "SUFFIX|WEEKDAY|LABEL|DAY_LABEL".
-# A kind with a single weekly occurrence has exactly one row (SUFFIX
-# "-"); a kind with several (e.g. two lectures/week) has one row per
-# occurrence -- for a renderer deciding whether a kind needs one merged
-# column or one column per occurrence (see render-markdown.sh/
-# render-html.sh). DAY_LABEL is session-kinds.conf's own optional 10th
-# field, empty if that row didn't set one.
+# declared for KIND_ID, in file order:
+# "SUFFIX|WEEKDAY|LABEL|DAY_LABEL|HEADER_LABEL". A kind with a single
+# weekly occurrence has exactly one row (SUFFIX "-"); a kind with
+# several (e.g. two lectures/week) has one row per occurrence -- for a
+# renderer deciding whether a kind needs one merged column or one column
+# per occurrence (see render-markdown.sh/render-html.sh). DAY_LABEL is
+# session-kinds.conf's own optional 10th field, empty if that row didn't
+# set one. HEADER_LABEL is the optional 16th field, a full column-header
+# text override -- see kind_columns' own comment.
 kind_suffixes() {
     local conf_file="$1" kind_id="$2"
-    local k l w s sp v ws we ew dl cew ashw hcw clf pv
+    local k l w s sp v ws we ew dl cew ashw hcw clf pv hl
     local seen=""
-    while IFS='|' read -r k l w s sp v ws we ew dl cew ashw hcw clf pv; do
+    while IFS='|' read -r k l w s sp v ws we ew dl cew ashw hcw clf pv hl; do
         [ -z "$k" ] && continue
         case "$k" in \#*) continue ;; esac
         [ "$k" = "$kind_id" ] || continue
         case ",${seen}," in *",${s},"*) continue ;; esac
         seen="${seen:+$seen,}$s"
-        printf '%s|%s|%s|%s\n' "$s" "$w" "$l" "$dl"
+        printf '%s|%s|%s|%s|%s\n' "$s" "$w" "$l" "$dl" "$hl"
     done < <(grep -vE '^\s*#|^\s*$' "$conf_file")
 }
 
@@ -683,6 +685,19 @@ _capitalize() {
 # column header can say "Mon-Wed" instead of asserting a specific day
 # that isn't actually fixed).
 #
+# HEADER_LABEL (session-kinds.conf's optional 16th field) overrides a
+# column's header with fully literal text, replacing the computed
+# default entirely (not just the weekday portion the way DAY_LABEL
+# does) -- for a course whose real convention doesn't match "Weekday
+# (Label Suffix)" at all, in wording or word order (e.g. cs1101s/
+# course-materials' own real Canvas page reads "Lecture (Wed)"/"Studio
+# (Mon/Tue)", Label-then-day and abbreviated, including a day
+# annotation on Studio and Reflection even though neither splits into
+# multiple columns). Set per row -- a split kind sets it per occurrence
+# (each row's own HEADER_LABEL applies only to that occurrence's
+# column); a single-occurrence kind sets it on its one row. Empty/unset
+# (every existing consumer) keeps today's exact computed default.
+#
 # Column ORDER is driven purely by CONF_FILE's own row order: each
 # (KIND_ID, SUFFIX) pair's column appears at the position of that row's
 # first occurrence in the file, not grouped by KIND_ID first. A course
@@ -708,12 +723,22 @@ kind_columns() {
         local -a suf_lines=()
         while IFS= read -r line; do [ -n "$line" ] && suf_lines+=("$line"); done < <(kind_suffixes "$conf_file" "$k")
         if [ "${#suf_lines[@]}" -le 1 ]; then
-            printf '%s||%s\n' "$k" "$(_capitalize "$k")"
+            local single_hl=""
+            [ "${#suf_lines[@]}" -eq 1 ] && single_hl="$(cut -d'|' -f5 <<< "${suf_lines[0]}")"
+            if [ -n "$single_hl" ]; then
+                printf '%s||%s\n' "$k" "$single_hl"
+            else
+                printf '%s||%s\n' "$k" "$(_capitalize "$k")"
+            fi
         else
-            local sl suf wd lbl dl wd_full
+            local sl suf wd lbl dl hl wd_full
             for sl in "${suf_lines[@]}"; do
-                IFS='|' read -r suf wd lbl dl <<< "$sl"
+                IFS='|' read -r suf wd lbl dl hl <<< "$sl"
                 [ "$suf" = "$s" ] || continue
+                if [ -n "$hl" ]; then
+                    printf '%s|%s|%s\n' "$k" "$suf" "$hl"
+                    continue
+                fi
                 if [ -n "$dl" ]; then
                     wd_full="$dl"
                 else

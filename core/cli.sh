@@ -136,6 +136,12 @@
 #                          order to "<holiday> (No <label>)" instead of
 #                          "No <label> (<holiday>)". Unset/empty keeps
 #                          the default order.
+#   CALENDAR_COLUMN_WIDTHS comma-separated CSS width values (one per
+#                          column: Week, then each kind column, then
+#                          Notes) -> `canvas` emits a `<colgroup>` with
+#                          those widths right after `<table>`. Unset =
+#                          no `<colgroup>`, leaving widths to the
+#                          browser.
 set -euo pipefail
 
 CLI_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -189,8 +195,9 @@ PDF_BASE_URL="$(get_course_var PDF_BASE_URL)"
 # to "" either way -- a course gets no current-week highlight, row
 # banding, occasion color, or distinct week-cell background unless it
 # sets at least one of those keys.
-CALENDAR_PALETTE="$(get_course_var CALENDAR_BORDER_COLOR)|$(get_course_var CALENDAR_HEADER_BG)|$(get_course_var CALENDAR_LINK_COLOR)|$(get_course_var CALENDAR_PENDING_COLOR)|$(get_course_var CALENDAR_CANCELLED_COLOR)|$(get_course_var CALENDAR_NOTES_COLOR)|$(get_course_var CALENDAR_CURRENT_BG)|$(get_course_var CALENDAR_CURRENT_BORDER_COLOR)|$(get_course_var CALENDAR_ROW_ODD_BG)|$(get_course_var CALENDAR_ROW_EVEN_BG)|$(get_course_var CALENDAR_OCCASION_COLOR)|$(get_course_var CALENDAR_CURRENT_WEEK_BG)|$(get_course_var CALENDAR_WEEK_BG)"
+CALENDAR_PALETTE="$(get_course_var CALENDAR_BORDER_COLOR)|$(get_course_var CALENDAR_HEADER_BG)|$(get_course_var CALENDAR_LINK_COLOR)|$(get_course_var CALENDAR_PENDING_COLOR)|$(get_course_var CALENDAR_CANCELLED_COLOR)|$(get_course_var CALENDAR_NOTES_COLOR)|$(get_course_var CALENDAR_CURRENT_BG)|$(get_course_var CALENDAR_CURRENT_BORDER_COLOR)|$(get_course_var CALENDAR_ROW_ODD_BG)|$(get_course_var CALENDAR_ROW_EVEN_BG)|$(get_course_var CALENDAR_OCCASION_COLOR)|$(get_course_var CALENDAR_CURRENT_WEEK_BG)|$(get_course_var CALENDAR_WEEK_BG)|$(get_course_var CALENDAR_RECESS_BG)"
 CALENDAR_SHOW_WEEK_DATES="$(get_course_var CALENDAR_SHOW_WEEK_DATES)"
+CALENDAR_COLUMN_WIDTHS="$(get_course_var CALENDAR_COLUMN_WIDTHS)"
 
 _content_map_path() {
     # || true: a scheduled slot with no content-map entry (unauthored,
@@ -277,7 +284,7 @@ cmd_canvas() {
         "$NUM_WEEKS" "$RECESS_AFTER_WEEK" "$titles" "$ALLOWLIST" "$LABELS" "$NOTES" \
         "$PDF_BASE_URL" "$HOLIDAYS" "$EMOJI" "$CALENDAR_PALETTE" "" \
         "$KIND_EXTRA_LINKS" "$EXTRA_LINKS" "$OCCASION_LINKS" "$GRADED_SLOTS" "$EXTRA_SLOTS" "$EXTRA_NOTE" \
-        "$SPECIAL_DATES" "$KEY_EVENTS" "$CALENDAR_SHOW_WEEK_DATES" "$HOLIDAY_FIRST"
+        "$SPECIAL_DATES" "$KEY_EVENTS" "$CALENDAR_SHOW_WEEK_DATES" "$HOLIDAY_FIRST" "$CALENDAR_COLUMN_WIDTHS"
     rm -f "$titles"
 
     local key_events

@@ -514,6 +514,37 @@ EOF
     assert_success "recess row sits after week 2" [ "$week2_pos" -lt "$recess_pos" ]
     assert_success "recess row sits before week 3" [ "$recess_pos" -lt "$week3_pos" ]
 
+    # Recess row's default text color matches CAL_NOTES (#555555, a
+    # neutral grey), not CAL_CANCELLED's red -- confirmed against the
+    # real original cs1101s/course-materials design, which was never
+    # red/error-styled for Recess.
+    assert_contains "recess row's default text color is CAL_NOTES, not CAL_CANCELLED" \
+        "$out" "color:#555555;\">🏖️ Recess Week"
+    assert_not_contains "recess row is not styled with CAL_CANCELLED's red" \
+        "$recess_row_line" "#c0392b"
+
+    # CAL_RECESS_BG (palette's 14th field, optional): a background for
+    # the recess row's spanning cell, unset by default (no background at
+    # all -- today's exact existing behavior for every course that's
+    # never set it).
+    local recess_bg_palette="#dddddd|#eeeeee||||||||||||#eaeaea"
+    out="$(render_html_calendar "$kinds2" 2026-08-10 4 2 "$titles" "$allowlist2" \
+        /dev/null /dev/null https://x /dev/null /dev/null "$recess_bg_palette")"
+    assert_contains "CAL_RECESS_BG set: recess row gets that background" \
+        "$out" "background:#eaeaea;text-align:center"
+
+    # COLUMN_WIDTHS (24th positional arg, optional): emits a <colgroup>
+    # right after <table>, one <col> per comma-separated width, in order.
+    out="$(render_html_calendar "$kinds2" 2026-08-10 1 0 "$titles" "$allowlist2" \
+        /dev/null /dev/null https://x /dev/null /dev/null \
+        "" "" "" "" "" "" "" "" "" "" "" "" "7%,18%,22%,18%,22%,13%")"
+    assert_contains "COLUMN_WIDTHS: <colgroup> present with the given widths, in order" \
+        "$out" '<colgroup><col style="width:7%"><col style="width:18%"><col style="width:22%"><col style="width:18%"><col style="width:22%"><col style="width:13%"></colgroup>'
+    out="$(render_html_calendar "$kinds2" 2026-08-10 1 0 "$titles" "$allowlist2" \
+        /dev/null /dev/null https://x /dev/null /dev/null)"
+    assert_not_contains "COLUMN_WIDTHS unset: no <colgroup> at all (backward compat)" \
+        "$out" "colgroup"
+
     # RECESS_AFTER_WEEK=0 -- no recess row at all.
     assert_not_contains "no recess: no Recess row" \
         "$(render_html_calendar "$kinds2" 2026-08-10 4 0 "$titles" "$allowlist2" \

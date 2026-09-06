@@ -52,7 +52,7 @@ for every renderer-specific step.
   `KIND_ID`):
 
   ```
-  KIND_ID|LABEL|WEEKDAY|SUFFIX|SLOT_PATTERN|VARIANTS|WEEK_START|WEEK_END|EXCLUDE_WEEKS|DAY_LABEL|CANCEL_EXTRA_WEEKDAYS|AUTO_SHIFT_ON_HOLIDAY|HOLIDAY_CONFLICT_WEEKS|CONTENT_LIST_FILE|PUBLIC_VARIANTS
+  KIND_ID|LABEL|WEEKDAY|SUFFIX|SLOT_PATTERN|VARIANTS|WEEK_START|WEEK_END|EXCLUDE_WEEKS|DAY_LABEL|CANCEL_EXTRA_WEEKDAYS|AUTO_SHIFT_ON_HOLIDAY|HOLIDAY_CONFLICT_WEEKS|CONTENT_LIST_FILE|PUBLIC_VARIANTS|HEADER_LABEL
   ```
 
   | Field | Meaning |
@@ -71,6 +71,7 @@ for every renderer-specific step.
   | `HOLIDAY_CONFLICT_WEEKS` | optional 13th field (omit entirely, or `-`): comma-separated week numbers where a holiday collision is already known and deliberately accepted (e.g. the real course already runs a take-home activity that week) — the occurrence is held in place instead of shifted/cancelled. See "Conflict-in-place" below |
   | `CONTENT_LIST_FILE` | optional 14th field (omit entirely, or `-`): a path to a file listing content identifiers in curriculum order, one per line — the *content* placed in this occurrence shifts past a holiday collision while `SLOT_ID` stays exactly what `SLOT_PATTERN` says (still week-derived, e.g. `L4A`). See "Computed content placement" below |
   | `PUBLIC_VARIANTS` | optional 15th field (omit entirely, or `-`): comma-separated subset of `VARIANTS` that should actually get a link on a rendered page — the rest are still built/version-tracked, just never linked, not even pending/greyed. For a kind whose `VARIANTS` legitimately mixes a public and an internal artifact (e.g. a real `instructor,student` studio, where the instructor copy is never meant for a student-facing page), this is the field that narrows "what's built" down to "what's shown here." See "Public/internal variants" below |
+  | `HEADER_LABEL` | optional 16th field (omit entirely, or `-`): fully overrides a column's header text, replacing the computed `"Weekday (Label Suffix)"`/capitalized-`KIND_ID` default entirely — unlike `DAY_LABEL`, which only swaps the weekday portion within that fixed template. For a course whose real convention is worded or ordered differently (e.g. `"Lecture (Wed)"` instead of `"Wednesday (Lecture A)"`, or a day annotation on a kind that never splits into multiple columns, like `"Studio (Mon/Tue)"`), set this per row — a split kind sets it per occurrence, a single-occurrence kind sets it on its one row |
 
   This is what makes "2 lectures a week" vs. "1 lecture + 1 recitation +
   1 lab a week" — and a real course's irregular exceptions — expressible
@@ -244,7 +245,9 @@ actually wants to change:
 | `CALENDAR_OCCASION_COLOR` | an occasion label's (e.g. an assessment replacing a slot) text | *(unset — no color)* |
 | `CALENDAR_CURRENT_WEEK_BG` | the current week's own number-cell background, distinct from `CALENDAR_CURRENT_BG`'s data cells | *(unset — falls back to `CALENDAR_CURRENT_BG`)* |
 | `CALENDAR_WEEK_BG` | every (non-current) week's number-cell background | *(unset — no distinct background)* |
+| `CALENDAR_RECESS_BG` | the Recess row's spanning-cell background (see "Recess row" above) — text color is `CALENDAR_NOTES_COLOR`, not a separate key | *(unset — no background)* |
 | `CALENDAR_SHOW_WEEK_DATES` | any non-empty value shows a "10 Aug – 14 Aug" date-range sub-line under every week's number | *(unset — no date sub-line)* |
+| `CALENDAR_COLUMN_WIDTHS` | comma-separated CSS width values (one per column: Week, then each kind column, then Notes) — emits a `<colgroup>` right after `<table>`, e.g. `7%,18%,22%,18%,22%,13%` | *(unset — no `<colgroup>`, widths left to the browser)* |
 
 ```
 CALENDAR_BORDER_COLOR = #dddddd
