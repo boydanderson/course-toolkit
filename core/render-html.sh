@@ -391,10 +391,14 @@ render_kind_cell_html() {
 }
 
 # render_html_calendar -- same signature as render-markdown.sh's
-# render_markdown_calendar, HTML `<table>` output, including the same
-# "Recess" row (all dashes, cancelled-styled note) inserted when
-# RECESS_AFTER_WEEK > 0 -- see that function's own comment and
-# semester-lib.sh's semester_recess_week. Not counted toward row_index
+# render_markdown_calendar, HTML `<table>` output. Its own "Recess" row
+# (inserted when RECESS_AFTER_WEEK > 0) is a single `colspan`-spanning
+# cell across every real column plus Notes, centered/italic/muted --
+# HTML supports a true spanning cell, unlike render-markdown.sh's plain
+# GFM pipe-table (which has no colspan concept at all, so it stays one
+# dash per column there; see that function's own comment). See
+# semester-lib.sh's semester_recess_week for how the recess week itself
+# is computed. Not counted toward row_index
 # (so real teaching weeks' odd/even banding stays undisturbed by
 # whether a recess row was inserted) and not current-week-highlighted
 # (it's never "this week" in the teaching-week sense). PALETTE (12th,
@@ -481,14 +485,10 @@ render_html_calendar() {
     occ_file="$(mktemp)"
     while IFS='|' read -r teaching_week monday; do
         if [ -n "$recess_monday" ] && [ "$teaching_week" -eq "$((recess_after + 1))" ]; then
-            local recess_td="${td_style}color:${CAL_CANCELLED};"
+            local recess_colspan=$((${#col_kind[@]} + 2))
             echo '<tr>'
-            printf '<td style="%sfont-weight:bold;">Recess</td>' "$td_style"
-            for ((i = 0; i < ${#col_kind[@]}; i++)); do
-                printf '<td style="%s">-</td>' "$td_style"
-            done
-            printf '<td style="%s">🏖️ Recess Week - No classes (%s - %s)</td>' \
-                "$recess_td" "$recess_monday" "$recess_friday"
+            printf '<td colspan="%d" style="%stext-align:center;font-style:italic;color:%s;">🏖️ Recess Week - No classes (%s - %s)</td>' \
+                "$recess_colspan" "$td_style" "$CAL_CANCELLED" "$recess_monday" "$recess_friday"
             echo '</tr>'
         fi
 

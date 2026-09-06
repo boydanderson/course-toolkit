@@ -492,13 +492,23 @@ EOF
     # Recess row: inserted between teaching weeks RECESS_AFTER_WEEK and
     # RECESS_AFTER_WEEK+1 when RECESS_AFTER_WEEK > 0 -- same dates as
     # render-markdown.sh's equivalent test (semester_recess_week is
-    # shared, tested directly in semester-lib.test.sh).
+    # shared, tested directly in semester-lib.test.sh). Unlike Markdown's
+    # plain pipe-table (no colspan concept), HTML renders it as one true
+    # spanning cell across the whole row (Week + every kind column +
+    # Notes = kinds2's 2 lecture columns + 2 = colspan 4), not a separate
+    # "Recess" week-label cell plus a dash per column.
     out="$(render_html_calendar "$kinds2" 2026-08-10 4 2 "$titles" "$allowlist2" \
         /dev/null /dev/null https://x /dev/null /dev/null)"
-    assert_contains "recess row's week cell" "$out" "<td style=\"border:1px solid #dddddd;padding:6px 8px;vertical-align:top;font-weight:bold;\">Recess</td>"
-    assert_contains "recess row's note" "$out" "🏖️ Recess Week - No classes (2026-08-24 - 2026-08-28)"
+    assert_contains "recess row is one spanning cell across the whole row" \
+        "$out" 'colspan="4"'
+    assert_contains "recess row's note, inside the spanning cell" \
+        "$out" "🏖️ Recess Week - No classes (2026-08-24 - 2026-08-28)"
+    local recess_row_line
+    recess_row_line="$(echo "$out" | grep "Recess Week")"
+    assert_eq "recess row has exactly one <td> (the spanning cell), not one per column" \
+        "1" "$(echo "$recess_row_line" | grep -o '<td' | wc -l | tr -d ' ')"
     local recess_pos week2_pos week3_pos
-    recess_pos=$(echo "$out" | grep -bo ">Recess<" | head -1 | cut -d: -f1)
+    recess_pos=$(echo "$out" | grep -bo "Recess Week" | head -1 | cut -d: -f1)
     week2_pos=$(echo "$out" | grep -bo ">2</td>" | head -1 | cut -d: -f1)
     week3_pos=$(echo "$out" | grep -bo ">3</td>" | head -1 | cut -d: -f1)
     assert_success "recess row sits after week 2" [ "$week2_pos" -lt "$recess_pos" ]
