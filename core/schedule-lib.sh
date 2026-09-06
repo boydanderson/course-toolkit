@@ -269,9 +269,9 @@ _row_holiday_shift_skip() {
 occurrence_count() {
     local conf_file="$1" kind_id="$2" target_week="$3" target_weekday="$4" target_suffix="$5"
     local holidays_file="${6:-}" start_monday="${7:-}" recess_after_week="${8:-}"
-    local k l w s sp v ws we ew dl cew ashw hcw clf pv week count=0
+    local k l w s sp v ws we ew dl cew ashw hcw clf pv hl week count=0
     for ((week = 1; week <= target_week; week++)); do
-        while IFS='|' read -r k l w s sp v ws we ew dl cew ashw hcw clf; do
+        while IFS='|' read -r k l w s sp v ws we ew dl cew ashw hcw clf pv hl; do
             [ -z "$k" ] && continue
             case "$k" in \#*) continue ;; esac
             [ "$k" = "$kind_id" ] || continue
@@ -331,9 +331,9 @@ occurrence_count() {
 content_ref_count() {
     local conf_file="$1" kind_id="$2" target_week="$3" target_weekday="$4" target_suffix="$5"
     local holidays_file="${6:-}" start_monday="${7:-}" recess_after_week="${8:-}"
-    local k l w s sp v ws we ew dl cew ashw hcw clf pv week content_index=0
+    local k l w s sp v ws we ew dl cew ashw hcw clf pv hl week content_index=0
     for ((week = 1; week <= target_week; week++)); do
-        while IFS='|' read -r k l w s sp v ws we ew dl cew ashw hcw clf; do
+        while IFS='|' read -r k l w s sp v ws we ew dl cew ashw hcw clf pv hl; do
             [ -z "$k" ] && continue
             case "$k" in \#*) continue ;; esac
             [ "$k" = "$kind_id" ] || continue
@@ -452,9 +452,9 @@ content_ref_count() {
 week_occurrences() {
     local conf_file="$1" week_monday="$2" teaching_week="$3"
     local holidays_file="${4:-}" start_monday="${5:-}" recess_after_week="${6:-}"
-    local line kind_id label weekday suffix slot_pattern variants week_start week_end exclude_weeks day_label cancel_extra_weekdays auto_shift_on_holiday holiday_conflict_weeks content_list_file public_variants
+    local line kind_id label weekday suffix slot_pattern variants week_start week_end exclude_weeks day_label cancel_extra_weekdays auto_shift_on_holiday holiday_conflict_weeks content_list_file public_variants header_label
     local date slot_id count cancel_extra_dates conflict_holiday is_conflict_week content_ref
-    while IFS='|' read -r kind_id label weekday suffix slot_pattern variants week_start week_end exclude_weeks day_label cancel_extra_weekdays auto_shift_on_holiday holiday_conflict_weeks content_list_file public_variants; do
+    while IFS='|' read -r kind_id label weekday suffix slot_pattern variants week_start week_end exclude_weeks day_label cancel_extra_weekdays auto_shift_on_holiday holiday_conflict_weeks content_list_file public_variants header_label; do
         [ -z "$kind_id" ] && continue
         case "$kind_id" in \#*) continue ;; esac
         if [ -n "$auto_shift_on_holiday" ] && [ "$auto_shift_on_holiday" != "-" ]; then

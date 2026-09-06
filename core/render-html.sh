@@ -135,7 +135,16 @@ _html_variant_links() {
         for vv in "${vlist[@]}"; do
             case ",${public_variants}," in *",${vv},"*) filtered+=("$vv") ;; esac
         done
-        vlist=("${filtered[@]}")
+        # "${filtered[@]}" on a zero-element array throws "unbound
+        # variable" under bash 3.2's set -u (fixed in bash 4.4+) even
+        # though the array itself is declared -- guard the zero-match
+        # case explicitly rather than relying on filtered always having
+        # at least one element.
+        if [ "${#filtered[@]}" -eq 0 ]; then
+            vlist=()
+        else
+            vlist=("${filtered[@]}")
+        fi
     fi
     local parts=() v label fname link_style=""
     [ -n "$CAL_LINK" ] && link_style=" style=\"color:${CAL_LINK};\""
