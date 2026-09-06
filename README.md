@@ -1,6 +1,6 @@
 # course-toolkit
 
-A reusable course-materials build system: a calendar-driven weekly
+A reusable build system for course materials: a calendar-driven weekly
 schedule engine, PDF version tracking, and Canvas/README calendar
 generation. A course's weekly shape and slide-authoring format are both
 configuration, not hardcoded — a course declares its shape, picks a
@@ -214,8 +214,8 @@ generation, its own parallel-build job isolation) is expected to keep
 that as its own bespoke build script, sourcing whichever narrower
 `core/*.sh` primitives it needs (`sgt_date`, `get_slot_version`,
 `splice_markers`, ...) instead of forcing it through this contract —
-`cs1101s/course-materials`' own `build-lecture.sh`/`build-studio.sh` do
-this and never call `backend_build_slot`/`backend_content_hash` at all.
+such a script can skip `build_slot`/`content_hash` entirely and never
+call `backend_build_slot`/`backend_content_hash` at all.
 
 Interactive-snippet testing (e.g. running embedded code through a real
 interpreter) is not part of this toolkit — it's a course/content
