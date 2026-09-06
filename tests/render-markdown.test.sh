@@ -137,6 +137,21 @@ EOF
     assert_contains "_md_variant_links: label + URL -> a real markdown link" \
         "$links" "[Recording](https://panopto.example/L4A)"
 
+    # PUBLIC_VARIANTS: narrows VARIANTS down to what's actually linked
+    # (e.g. a real "instructor,student" studio where only "student"
+    # belongs on a student-facing page).
+    links="$(_md_variant_links studio S1 instructor,student https://x 1)"
+    assert_contains "PUBLIC_VARIANTS unset: both variants linked (today's exact default)" \
+        "$links" "Instructor"
+    assert_contains "PUBLIC_VARIANTS unset: both variants linked (today's exact default) (2)" \
+        "$links" "Student"
+
+    links="$(_md_variant_links studio S1 instructor,student https://x 1 "" "" student)"
+    assert_not_contains "PUBLIC_VARIANTS=student: instructor variant never appears, not even pending" \
+        "$links" "Instructor"
+    assert_contains "PUBLIC_VARIANTS=student: student variant still links" \
+        "$links" "[Student](https://x/studio-S1.student.pdf)"
+
     # render_markdown_calendar end to end: kind_extra_links.conf declares
     # "lecture" gets a Recording link; extra-links.conf has a URL for
     # L4A (released, week 4) but not L4B (also week 4, unreleased) --
@@ -162,6 +177,20 @@ EOF
         /dev/null /dev/null https://example.org/pdfs /dev/null /dev/null)"
     assert_not_contains "no kind_extra_links_file: no Recording links anywhere" \
         "$out" "Recording"
+
+    # PUBLIC_VARIANTS end to end: a real "instructor,student" studio row
+    # (session-kinds.conf's own 15th field) -- the instructor variant
+    # must never appear on the rendered page at all, even pending.
+    local kinds_pv="$scratch/session-kinds-pv.conf"
+    printf 'studio|Studio|mon|-|S{n}|instructor,student|1|4|-|-|-|-|-|-|student\n' > "$kinds_pv"
+    local allowlist_pv="$scratch/allowlist-pv.conf"
+    printf 'S1\n' > "$allowlist_pv"
+    out="$(render_markdown_calendar "$kinds_pv" 2026-08-10 1 0 /dev/null "$allowlist_pv" \
+        /dev/null /dev/null https://example.org/pdfs /dev/null /dev/null)"
+    assert_not_contains "PUBLIC_VARIANTS end to end: instructor variant never appears" \
+        "$out" "Instructor"
+    assert_contains "PUBLIC_VARIANTS end to end: student variant still links" \
+        "$out" "[Student](https://example.org/pdfs/studio-S1.student.pdf)"
 
     # The actual Stage-5-discovered gap, markdown side: a kind with
     # several weekly occurrences (lecture A + B) where only ONE is

@@ -83,7 +83,7 @@ studio|B|Thu-Fri (Studio B)" "$out"
     } > "$dlx_conf"
     out="$(week_occurrences "$dlx_conf" 2026-08-10 3)"
     assert_eq "DAY_LABEL doesn't break EXCLUDE_WEEKS: week 3's mon row is excluded, only thu's Studio5 remains" \
-        "studio|Studio|Studio5|2026-08-13|thu|B|instructor,student|||" "$out"
+        "studio|Studio|Studio5|2026-08-13|thu|B|instructor,student||||" "$out"
     out="$(week_occurrences "$dlx_conf" 2026-08-10 4 | head -1 | cut -d'|' -f3)"
     assert_eq "DAY_LABEL doesn't break {count}: week 4 mon is Studio6, no gap/shift from the exclusion" \
         "Studio6" "$out"
@@ -493,4 +493,20 @@ studio|B|Thu-Fri (Studio B)" "$out"
     assert_eq "session_kind_ids: comment-only conf yields no kinds, not an error" \
         "" "$(session_kind_ids "$empty_conf")"
     rm -f "$empty_conf"
+
+    # PUBLIC_VARIANTS (optional 15th field): passed straight through as
+    # week_occurrences' own 11th output column, unaffected by scheduling.
+    local pv_conf
+    pv_conf="$(mktemp)"
+    printf 'studio|Studio|mon|-|S{n}|instructor,student|1|4|-\n' > "$pv_conf"
+    out="$(week_occurrences "$pv_conf" 2026-08-10 1)"
+    assert_eq "PUBLIC_VARIANTS: omitted field 15 -> empty 11th output column" \
+        "studio|Studio|S1|2026-08-10|mon|-|instructor,student||||" "$out"
+    rm -f "$pv_conf"
+
+    printf 'studio|Studio|mon|-|S{n}|instructor,student|1|4|-|-|-|-|-|-|student\n' > "$pv_conf"
+    out="$(week_occurrences "$pv_conf" 2026-08-10 1)"
+    assert_eq "PUBLIC_VARIANTS: set field 15 -> passed through as 11th output column" \
+        "studio|Studio|S1|2026-08-10|mon|-|instructor,student||||student" "$out"
+    rm -f "$pv_conf"
 }

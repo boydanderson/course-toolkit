@@ -52,7 +52,7 @@ for every renderer-specific step.
   `KIND_ID`):
 
   ```
-  KIND_ID|LABEL|WEEKDAY|SUFFIX|SLOT_PATTERN|VARIANTS|WEEK_START|WEEK_END|EXCLUDE_WEEKS|DAY_LABEL|CANCEL_EXTRA_WEEKDAYS|AUTO_SHIFT_ON_HOLIDAY|HOLIDAY_CONFLICT_WEEKS
+  KIND_ID|LABEL|WEEKDAY|SUFFIX|SLOT_PATTERN|VARIANTS|WEEK_START|WEEK_END|EXCLUDE_WEEKS|DAY_LABEL|CANCEL_EXTRA_WEEKDAYS|AUTO_SHIFT_ON_HOLIDAY|HOLIDAY_CONFLICT_WEEKS|CONTENT_LIST_FILE|PUBLIC_VARIANTS
   ```
 
   | Field | Meaning |
@@ -62,7 +62,7 @@ for every renderer-specific step.
   | `WEEKDAY` | `mon`\|`tue`\|`wed`\|`thu`\|`fri`\|`sat`\|`sun` |
   | `SUFFIX` | distinguishes same-kind occurrences in one week (`A`/`B` for two lectures); `-` if there's only one |
   | `SLOT_PATTERN` | templated public ID: `{n}` → teaching week number, `{suffix}` → `SUFFIX` (empty if `-`), e.g. `L{n}{suffix}` → `L4A`. A third placeholder, `{count}`, is a flat 1-based counter across every active occurrence of this `KIND_ID` so far (merged across all its rows, in week/row order) instead of a week-derived number — e.g. `Lab{count}` numbers 2-a-week labs `Lab1..LabN` straight through rather than `Lab1A`/`Lab1B`/`Lab2A`...; a row skipped via `EXCLUDE_WEEKS` doesn't consume a count, so the sequence stays gap-free |
-  | `VARIANTS` | comma-separated build-artifact variants, e.g. `view,print`, `problem,solution`, or `none` for one undifferentiated PDF |
+  | `VARIANTS` | comma-separated build-artifact variants, e.g. `view,print`, `problem,solution`, or `none` for one undifferentiated PDF — the full set that's *built and version-tracked*; which of these actually get linked on a rendered page is `PUBLIC_VARIANTS`' concern, not this one |
   | `WEEK_START`, `WEEK_END` | inclusive teaching-week bounds this occurrence is active for |
   | `EXCLUDE_WEEKS` | optional (omit, or `-`): comma-separated week numbers to skip within that range, e.g. `4,6,10,12` for assessment-displaced weeks |
   | `DAY_LABEL` | optional 10th field (omit entirely, or `-`): overrides the weekday name a split column's header shows for this one occurrence (see "Column splitting" below) — `WEEKDAY` still has to name one concrete day for the schedule engine's own date math, but a course whose real session isn't pinned to that exact day (e.g. "Session 1, some day Mon-Wed") can set `DAY_LABEL` to `Mon-Wed` so the header doesn't assert a precision that isn't real |
@@ -70,6 +70,7 @@ for every renderer-specific step.
   | `AUTO_SHIFT_ON_HOLIDAY` | optional 12th field (omit entirely, or `-`): when set, a holiday-colliding week (same multi-day check `CANCEL_EXTRA_WEEKDAYS` uses) isn't just cancelled for display — the occurrence is skipped entirely at placement time, so the content that would have landed there shifts to the next eligible week instead, cascading the same way an `EXCLUDE_WEEKS` week already does. Requires `{count}` in `SLOT_PATTERN` (a clear error otherwise) — shifting only makes sense for a flat, week-independent numbering; a week-derived slot ID like `L4A` names the week it's shown in by construction, so it isn't a candidate. See "Holiday-aware auto-shift" below |
   | `HOLIDAY_CONFLICT_WEEKS` | optional 13th field (omit entirely, or `-`): comma-separated week numbers where a holiday collision is already known and deliberately accepted (e.g. the real course already runs a take-home activity that week) — the occurrence is held in place instead of shifted/cancelled. See "Conflict-in-place" below |
   | `CONTENT_LIST_FILE` | optional 14th field (omit entirely, or `-`): a path to a file listing content identifiers in curriculum order, one per line — the *content* placed in this occurrence shifts past a holiday collision while `SLOT_ID` stays exactly what `SLOT_PATTERN` says (still week-derived, e.g. `L4A`). See "Computed content placement" below |
+  | `PUBLIC_VARIANTS` | optional 15th field (omit entirely, or `-`): comma-separated subset of `VARIANTS` that should actually get a link on a rendered page — the rest are still built/version-tracked, just never linked, not even pending/greyed. For a kind whose `VARIANTS` legitimately mixes a public and an internal artifact (e.g. a real `instructor,student` studio, where the instructor copy is never meant for a student-facing page), this is the field that narrows "what's built" down to "what's shown here." See "Public/internal variants" below |
 
   This is what makes "2 lectures a week" vs. "1 lecture + 1 recitation +
   1 lab a week" — and a real course's irregular exceptions — expressible
@@ -179,6 +180,19 @@ for every renderer-specific step.
   next eligible week instead. A week past the end of `CONTENT_LIST_FILE`
   (more eligible weeks than content) gets an empty `CONTENT_REF` for
   free -- renders as a normal not-yet-authored slot.
+
+  **Public/internal variants**: `VARIANTS` describes everything a kind
+  builds and version-tracks; it says nothing about which of those
+  belong on a student-facing page. A real course can have both in one
+  kind -- e.g. a studio with `instructor,student` variants, where the
+  instructor copy is a real build artifact but must never appear on a
+  public README/Canvas page. `PUBLIC_VARIANTS` narrows the link list
+  without touching `VARIANTS` itself: set it to a comma-separated
+  subset (e.g. `student`) and only those variants ever get a link --
+  the rest are omitted entirely, not shown pending/greyed the way an
+  unreleased-but-public variant would be. Unset (the default) links
+  every variant in `VARIANTS`, today's exact existing behavior for
+  every course that's never needed this distinction.
 - **A content-to-slot map** — `SLOT_ID|SOURCE_PATH` pairs, so the build
   knows which file backs each scheduled slot. No fixed naming
   convention is assumed — lay content out however suits the course.

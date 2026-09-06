@@ -100,8 +100,8 @@ _calendar_palette() {
 }
 
 # _html_variant_links KIND_ID SLOT_ID VARIANTS BASE_URL RELEASED [PALETTE]
-# [EXTRA_LINK_LABEL] [EXTRA_LINK_URL] -> HTML <a>/<span> links,
-# "&middot;"-joined. Mirrors render-markdown.sh's _md_variant_links
+# [EXTRA_LINK_LABEL] [EXTRA_LINK_URL] [PUBLIC_VARIANTS] -> HTML <a>/<span>
+# links, "&middot;"-joined. Mirrors render-markdown.sh's _md_variant_links
 # exactly, just HTML output instead of markdown. EXTRA_LINK_LABEL/_URL
 # (both optional -- e.g. "Recording"/a Panopto URL) append one more link
 # after the normal variant links, live if EXTRA_LINK_URL is non-empty,
@@ -109,13 +109,33 @@ _calendar_palette() {
 # other link here, so a course that wants a second, independently-gated
 # link per occurrence (a recording goes up on its own schedule, separate
 # from the PDF release) doesn't need its own cell-rendering logic.
+#
+# PUBLIC_VARIANTS (optional, session-kinds.conf's own 15th field, comma-
+# separated subset of VARIANTS): when non-empty, only variants also
+# listed here get a link at all -- the rest are silently omitted, not
+# even shown pending/greyed, since they're not meant to be public in the
+# first place. For a kind whose VARIANTS legitimately mixes a public
+# and an internal artifact (e.g. epp2-toolkit-poc's real
+# "instructor,student" studios -- both variants are built and version-
+# tracked, but only "student" belongs on a student-facing page),
+# VARIANTS keeps meaning "what's built" and PUBLIC_VARIANTS narrows
+# "what's linked here." Empty/unset (the default) links every variant in
+# VARIANTS, today's exact existing behavior -- no existing consumer sets
+# session-kinds.conf's 15th field, so this is fully backward compatible.
 _html_variant_links() {
     local kind_id="$1" slot_id="$2" variants="$3" base_url="$4" released="$5"
     _calendar_palette "${6:-}"
-    local extra_link_label="${7:-}" extra_link_url="${8:-}"
+    local extra_link_label="${7:-}" extra_link_url="${8:-}" public_variants="${9:-}"
     local -a vlist
     IFS=',' read -ra vlist <<< "$variants"
     [ "$variants" = "none" ] && vlist=("")
+    if [ -n "$public_variants" ]; then
+        local -a filtered=() vv
+        for vv in "${vlist[@]}"; do
+            case ",${public_variants}," in *",${vv},"*) filtered+=("$vv") ;; esac
+        done
+        vlist=("${filtered[@]}")
+    fi
     local parts=() v label fname link_style=""
     [ -n "$CAL_LINK" ] && link_style=" style=\"color:${CAL_LINK};\""
     for v in "${vlist[@]}"; do
@@ -137,7 +157,7 @@ _html_variant_links() {
             parts+=("<span style=\"color:${CAL_PENDING};\">${extra_link_label}</span>")
         fi
     fi
-    local out="${parts[0]}" i
+    local out="${parts[0]:-}" i
     for ((i = 1; i < ${#parts[@]}; i++)); do
         out="${out} &middot; ${parts[$i]}"
     done
@@ -171,7 +191,7 @@ _occasion_links_html() {
         fi
     fi
     [ "${#parts[@]}" -eq 0 ] && return 0
-    local out="${parts[0]}" i
+    local out="${parts[0]:-}" i
     for ((i = 1; i < ${#parts[@]}; i++)); do
         out="${out} &middot; ${parts[$i]}"
     done
@@ -298,10 +318,11 @@ render_kind_cell_html() {
     fi
 
     local cancelled_style="font-weight:600;color:${CAL_CANCELLED};"
-    local primary_variants="" any_cancelled=0
-    while IFS='|' read -r rkind rlabel rslot rdate rweekday rsuffix rvariants rcancel_extra rconflict rcontent_ref; do
+    local primary_variants="" primary_public_variants="" any_cancelled=0
+    while IFS='|' read -r rkind rlabel rslot rdate rweekday rsuffix rvariants rcancel_extra rconflict rcontent_ref rpublic_variants; do
         [ -z "$rkind" ] && continue
         primary_variants="$rvariants"
+        primary_public_variants="$rpublic_variants"
         if [ -n "$rconflict" ]; then
             local title released links extra_url=""
             title="$(slot_title "$rslot" "$titles_file")"
@@ -311,7 +332,7 @@ render_kind_cell_html() {
             fi
             if is_slot_released "$rslot" "$allowlist_file"; then released=1; else released=0; fi
             [ -n "$extra_link_label" ] && extra_url="$(extra_link_for_slot "$rslot" "$extra_link_file")"
-            links="$(_html_variant_links "$rkind" "$rslot" "$rvariants" "$base_url" "$released" "$palette" "$extra_link_label" "$extra_url")"
+            links="$(_html_variant_links "$rkind" "$rslot" "$rvariants" "$base_url" "$released" "$palette" "$extra_link_label" "$extra_url" "$rpublic_variants")"
             cell_html="${cell_html}<div style=\"font-weight:600;\">⚠️ $(echo "$title" | _html_escape)</div><div style=\"margin-top:2px;font-size:0.85rem;\">${links}</div>"
             if [ -n "$extra_note_file" ]; then
                 local extra_note
@@ -341,7 +362,7 @@ render_kind_cell_html() {
         fi
         if is_slot_released "$rslot" "$allowlist_file"; then released=1; else released=0; fi
         [ -n "$extra_link_label" ] && extra_url="$(extra_link_for_slot "$rslot" "$extra_link_file")"
-        links="$(_html_variant_links "$rkind" "$rslot" "$rvariants" "$base_url" "$released" "$palette" "$extra_link_label" "$extra_url")"
+        links="$(_html_variant_links "$rkind" "$rslot" "$rvariants" "$base_url" "$released" "$palette" "$extra_link_label" "$extra_url" "$rpublic_variants")"
         cell_html="${cell_html}<div style=\"font-weight:600;\">$(echo "$title" | _html_escape)</div><div style=\"margin-top:2px;font-size:0.85rem;\">${links}</div>"
         if [ -n "$extra_note_file" ]; then
             local extra_note
@@ -362,7 +383,7 @@ render_kind_cell_html() {
             fi
             if is_slot_released "$es" "$allowlist_file"; then released=1; else released=0; fi
             [ -n "$extra_link_label" ] && extra_url="$(extra_link_for_slot "$es" "$extra_link_file")"
-            links="$(_html_variant_links "$kind_id" "$es" "$primary_variants" "$base_url" "$released" "$palette" "$extra_link_label" "$extra_url")"
+            links="$(_html_variant_links "$kind_id" "$es" "$primary_variants" "$base_url" "$released" "$palette" "$extra_link_label" "$extra_url" "$primary_public_variants")"
             cell_html="${cell_html}<div style=\"font-weight:600;\">$(echo "$title" | _html_escape)</div><div style=\"margin-top:2px;font-size:0.85rem;\">${links}</div>"
         done
     fi

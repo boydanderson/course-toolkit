@@ -338,6 +338,27 @@ EOF
     assert_contains "_html_variant_links: extra link comes after the normal variant link" \
         "$links" '<a href="https://x/lecture-L1A.view.pdf">View</a> &middot; <a href="https://panopto.example/L1A">Recording</a>'
 
+    # PUBLIC_VARIANTS: narrows VARIANTS down to what's actually linked
+    # (e.g. a real "instructor,student" studio where only "student"
+    # belongs on a student-facing page).
+    links="$(_html_variant_links studio S1 instructor,student https://x 1)"
+    assert_contains "PUBLIC_VARIANTS unset: both variants linked (today's exact default)" \
+        "$links" "Instructor"
+    assert_contains "PUBLIC_VARIANTS unset: both variants linked (today's exact default) (2)" \
+        "$links" "Student"
+
+    links="$(_html_variant_links studio S1 instructor,student https://x 1 "" "" "" student)"
+    assert_not_contains "PUBLIC_VARIANTS=student: instructor variant never appears, not even pending" \
+        "$links" "Instructor"
+    assert_contains "PUBLIC_VARIANTS=student: student variant still links" \
+        "$links" '<a href="https://x/studio-S1.student.pdf">Student</a>'
+
+    links="$(_html_variant_links studio S1 instructor,student https://x 0 "" "" "" student)"
+    assert_contains "PUBLIC_VARIANTS=student: unreleased student variant is pending, not linked" \
+        "$links" '<span style="color:#888888;">Student</span>'
+    assert_not_contains "PUBLIC_VARIANTS=student: still no instructor variant when unreleased either" \
+        "$links" "Instructor"
+
     # render_html_calendar end to end: kind_extra_links.conf declares
     # "lecture" gets a Recording link; extra-links.conf has a URL for
     # L1A but not L1B -- proves the per-kind opt-in AND the
@@ -361,6 +382,20 @@ EOF
         /dev/null /dev/null https://example.org/pdfs /dev/null /dev/null)"
     assert_not_contains "no kind_extra_links_file: no Recording links anywhere" \
         "$out" "Recording"
+
+    # PUBLIC_VARIANTS end to end: a real "instructor,student" studio row
+    # (session-kinds.conf's own 15th field) -- the instructor variant
+    # must never appear on the rendered page at all, even pending.
+    local kinds_pv="$scratch/session-kinds-pv.conf"
+    printf 'studio|Studio|mon|-|S{n}|instructor,student|1|4|-|-|-|-|-|-|student\n' > "$kinds_pv"
+    local allowlist_pv="$scratch/allowlist-pv.conf"
+    printf 'S1\n' > "$allowlist_pv"
+    out="$(render_html_calendar "$kinds_pv" 2026-08-10 1 0 /dev/null "$allowlist_pv" \
+        /dev/null /dev/null https://example.org/pdfs /dev/null /dev/null)"
+    assert_not_contains "PUBLIC_VARIANTS end to end: instructor variant never appears" \
+        "$out" "Instructor"
+    assert_contains "PUBLIC_VARIANTS end to end: student variant still links" \
+        "$out" '<a href="https://example.org/pdfs/studio-S1.student.pdf">Student</a>'
 
     # The actual Stage-5-discovered gap: a kind with SEVERAL weekly
     # occurrences (lecture A + B) where only ONE is excluded a given

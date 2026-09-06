@@ -54,9 +54,9 @@
 #   VARIANTS      comma-separated build-artifact variants this kind
 #                 produces, e.g. "view,print", "problem,solution", or
 #                 "none" for a single undifferentiated PDF. This is the
-#                 FULL build-artifact set -- public-visibility policy
-#                 (e.g. "solutions are never distributed") is a separate,
-#                 later concern, not encoded here.
+#                 FULL build-artifact set -- which of these actually get
+#                 linked on a rendered page is PUBLIC_VARIANTS' concern
+#                 (optional 15th field, see below), not this one.
 #   WEEK_START,
 #   WEEK_END      teaching-week bounds this occurrence is active for
 #                 (inclusive); a kind that runs the whole semester repeats
@@ -136,6 +136,22 @@
 #                 week_occurrences' own comments for the full mechanism,
 #                 including why this needs its own holiday check
 #                 distinct from AUTO_SHIFT_ON_HOLIDAY's.
+#   PUBLIC_VARIANTS optional 15th field (omit entirely, or "-"):
+#                 comma-separated subset of VARIANTS that should actually
+#                 get a link on a rendered calendar page -- the rest are
+#                 still built and version-tracked (VARIANTS keeps
+#                 meaning "what's built"), just never linked, not even
+#                 pending/greyed. For a kind whose VARIANTS legitimately
+#                 mixes a public and an internal artifact (e.g. a real
+#                 "instructor,student" studio, where the instructor
+#                 variant is never meant for a student-facing page), this
+#                 is the field that narrows "what's built" down to
+#                 "what's shown here" -- see render-html.sh's/
+#                 render-markdown.sh's own PUBLIC_VARIANTS comments for
+#                 how it filters at render time. Passed straight through
+#                 as week_occurrences' own 11th output column, same as
+#                 VARIANTS itself -- this field never affects scheduling/
+#                 counting, only what a renderer does with the row.
 #
 # Comment lines (leading #) and blank lines are ignored, same convention
 # as every other .conf file in this ecosystem.
@@ -253,7 +269,7 @@ _row_holiday_shift_skip() {
 occurrence_count() {
     local conf_file="$1" kind_id="$2" target_week="$3" target_weekday="$4" target_suffix="$5"
     local holidays_file="${6:-}" start_monday="${7:-}" recess_after_week="${8:-}"
-    local k l w s sp v ws we ew dl cew ashw hcw clf week count=0
+    local k l w s sp v ws we ew dl cew ashw hcw clf pv week count=0
     for ((week = 1; week <= target_week; week++)); do
         while IFS='|' read -r k l w s sp v ws we ew dl cew ashw hcw clf; do
             [ -z "$k" ] && continue
@@ -315,7 +331,7 @@ occurrence_count() {
 content_ref_count() {
     local conf_file="$1" kind_id="$2" target_week="$3" target_weekday="$4" target_suffix="$5"
     local holidays_file="${6:-}" start_monday="${7:-}" recess_after_week="${8:-}"
-    local k l w s sp v ws we ew dl cew ashw hcw clf week content_index=0
+    local k l w s sp v ws we ew dl cew ashw hcw clf pv week content_index=0
     for ((week = 1; week <= target_week; week++)); do
         while IFS='|' read -r k l w s sp v ws we ew dl cew ashw hcw clf; do
             [ -z "$k" ] && continue
@@ -355,7 +371,12 @@ content_ref_count() {
 # [START_MONDAY] [RECESS_AFTER_WEEK] -> one line per active occurrence
 # for that teaching week, in CONF_FILE's own row order:
 #
-#   KIND_ID|LABEL|SLOT_ID|DATE|WEEKDAY|SUFFIX|VARIANTS|CANCEL_EXTRA_DATES|CONFLICT_HOLIDAY|CONTENT_REF
+#   KIND_ID|LABEL|SLOT_ID|DATE|WEEKDAY|SUFFIX|VARIANTS|CANCEL_EXTRA_DATES|CONFLICT_HOLIDAY|CONTENT_REF|PUBLIC_VARIANTS
+#
+# PUBLIC_VARIANTS is the row's own 15th field, passed straight through
+# unchanged (empty if that row didn't set one) -- a renderer uses it to
+# filter VARIANTS down to what actually gets linked, see
+# render-html.sh's/render-markdown.sh's own comments.
 #
 # CONTENT_REF (empty unless the row's own CONTENT_LIST_FILE, 14th field,
 # is set) is the content-list line this occurrence resolves to (e.g. a
@@ -431,9 +452,9 @@ content_ref_count() {
 week_occurrences() {
     local conf_file="$1" week_monday="$2" teaching_week="$3"
     local holidays_file="${4:-}" start_monday="${5:-}" recess_after_week="${6:-}"
-    local line kind_id label weekday suffix slot_pattern variants week_start week_end exclude_weeks day_label cancel_extra_weekdays auto_shift_on_holiday holiday_conflict_weeks content_list_file
+    local line kind_id label weekday suffix slot_pattern variants week_start week_end exclude_weeks day_label cancel_extra_weekdays auto_shift_on_holiday holiday_conflict_weeks content_list_file public_variants
     local date slot_id count cancel_extra_dates conflict_holiday is_conflict_week content_ref
-    while IFS='|' read -r kind_id label weekday suffix slot_pattern variants week_start week_end exclude_weeks day_label cancel_extra_weekdays auto_shift_on_holiday holiday_conflict_weeks content_list_file; do
+    while IFS='|' read -r kind_id label weekday suffix slot_pattern variants week_start week_end exclude_weeks day_label cancel_extra_weekdays auto_shift_on_holiday holiday_conflict_weeks content_list_file public_variants; do
         [ -z "$kind_id" ] && continue
         case "$kind_id" in \#*) continue ;; esac
         if [ -n "$auto_shift_on_holiday" ] && [ "$auto_shift_on_holiday" != "-" ]; then
@@ -507,8 +528,8 @@ week_occurrences() {
                 IFS="$IFS_SAVE2"
             fi
         fi
-        printf '%s|%s|%s|%s|%s|%s|%s|%s|%s|%s\n' \
-            "$kind_id" "$label" "$slot_id" "$date" "$weekday" "$suffix" "$variants" "$cancel_extra_dates" "$conflict_holiday" "$content_ref"
+        printf '%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s\n' \
+            "$kind_id" "$label" "$slot_id" "$date" "$weekday" "$suffix" "$variants" "$cancel_extra_dates" "$conflict_holiday" "$content_ref" "$public_variants"
     done < <(grep -vE '^\s*#|^\s*$' "$conf_file")
 }
 
@@ -580,7 +601,7 @@ weekday_full_name() {
 # field, empty if that row didn't set one.
 kind_suffixes() {
     local conf_file="$1" kind_id="$2"
-    local k l w s sp v ws we ew dl cew ashw hcw clf
+    local k l w s sp v ws we ew dl cew ashw hcw clf pv
     local seen=""
     while IFS='|' read -r k l w s sp v ws we ew dl cew ashw hcw clf; do
         [ -z "$k" ] && continue

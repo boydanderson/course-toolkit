@@ -17,22 +17,35 @@ source "$RENDER_MD_DIR/semester-lib.sh"
 source "$RENDER_MD_DIR/enrich-lib.sh"
 
 # _md_variant_links KIND_ID SLOT_ID VARIANTS PDF_BASE_URL RELEASED
-# [EXTRA_LINK_LABEL] [EXTRA_LINK_URL] -> "[View](url) &middot;
-# [Print](url)"-style markdown, or the same labels as plain (unlinked)
-# text if RELEASED is false. VARIANTS "none" -> single "Sheet" link/
-# label. EXTRA_LINK_LABEL/_URL (both optional -- e.g. "Recording"/a
+# [EXTRA_LINK_LABEL] [EXTRA_LINK_URL] [PUBLIC_VARIANTS] -> "[View](url)
+# &middot; [Print](url)"-style markdown, or the same labels as plain
+# (unlinked) text if RELEASED is false. VARIANTS "none" -> single "Sheet"
+# link/label. EXTRA_LINK_LABEL/_URL (both optional -- e.g. "Recording"/a
 # Panopto URL) append one more link after the normal variant links, same
 # convention as render-html.sh's _html_variant_links: a live
 # [label](url) if EXTRA_LINK_URL is set, plain unlinked text otherwise.
+#
+# PUBLIC_VARIANTS (optional, session-kinds.conf's own 15th field): see
+# _html_variant_links' own comment -- same filtering, narrows VARIANTS
+# ("what's built") down to "what's linked here" for a kind that mixes a
+# public and an internal artifact (e.g. an "instructor,student" studio).
+# Empty/unset links every variant, today's exact existing behavior.
 _md_variant_links() {
     local kind_id="$1" slot_id="$2" variants="$3" base_url="$4" released="$5"
-    local extra_link_label="${6:-}" extra_link_url="${7:-}"
+    local extra_link_label="${6:-}" extra_link_url="${7:-}" public_variants="${8:-}"
     local IFS=','
     local -a vlist
     read -ra vlist <<< "$variants"
     local parts=() v label fname
     if [ "$variants" = "none" ]; then
         vlist=("")
+    fi
+    if [ -n "$public_variants" ]; then
+        local -a filtered=() vv
+        for vv in "${vlist[@]}"; do
+            case ",${public_variants}," in *",${vv},"*) filtered+=("$vv") ;; esac
+        done
+        vlist=("${filtered[@]}")
     fi
     for v in "${vlist[@]}"; do
         if [ -z "$v" ]; then
@@ -55,7 +68,7 @@ _md_variant_links() {
             parts+=("$extra_link_label")
         fi
     fi
-    local out="${parts[0]}"
+    local out="${parts[0]:-}"
     local i
     for ((i = 1; i < ${#parts[@]}; i++)); do
         out="$out &middot; ${parts[$i]}"
@@ -97,7 +110,8 @@ _occasion_links_markdown() {
 
 # _row_title_and_links KIND_ID SLOT_ID VARIANTS TITLES_FILE ALLOWLIST_FILE
 # BASE_URL EXTRA_LINK_LABEL EXTRA_LINK_FILE GRADED_FILE [SOURCE_LINKS_FILE]
-# -> "TITLE|LINKS" (split by the caller on the first "|") -- the title/
+# [PUBLIC_VARIANTS] -> "TITLE|LINKS" (split by the caller on the first
+# "|") -- the title/
 # graded-prefix/release-gate/variant-links computation a normal
 # occurrence row and an extra slot (see kind_extra_slots, enrich-lib.sh)
 # both need identically; an extra slot just has no weekday/date/holiday-
@@ -111,7 +125,7 @@ _occasion_links_markdown() {
 _row_title_and_links() {
     local kind_id="$1" slot_id="$2" variants="$3" titles_file="$4" allowlist_file="$5"
     local base_url="$6" extra_link_label="$7" extra_link_file="$8" graded_file="$9"
-    local source_links_file="${10:-}"
+    local source_links_file="${10:-}" public_variants="${11:-}"
     local title released links extra_url="" source_path
     title="$(slot_title "$slot_id" "$titles_file")"
     title="$(compose_slot_title "$slot_id" "$title")"
@@ -128,7 +142,7 @@ _row_title_and_links() {
             released=0
         fi
         [ -n "$extra_link_label" ] && extra_url="$(extra_link_for_slot "$slot_id" "$extra_link_file")"
-        links="$(_md_variant_links "$kind_id" "$slot_id" "$variants" "$base_url" "$released" "$extra_link_label" "$extra_url")"
+        links="$(_md_variant_links "$kind_id" "$slot_id" "$variants" "$base_url" "$released" "$extra_link_label" "$extra_url" "$public_variants")"
     fi
     printf '%s|%s\n' "$title" "$links"
 }
@@ -146,7 +160,7 @@ _row_title_and_links() {
 _row_raw_title_and_links() {
     local kind_id="$1" slot_id="$2" variants="$3" titles_file="$4" allowlist_file="$5"
     local base_url="$6" extra_link_label="$7" extra_link_file="$8" graded_file="$9"
-    local source_links_file="${10:-}"
+    local source_links_file="${10:-}" public_variants="${11:-}"
     local title released links extra_url="" source_path
     title="$(slot_title "$slot_id" "$titles_file")"
     if [ -n "$graded_file" ] && is_graded_slot "$slot_id" "$graded_file"; then
@@ -162,7 +176,7 @@ _row_raw_title_and_links() {
             released=0
         fi
         [ -n "$extra_link_label" ] && extra_url="$(extra_link_for_slot "$slot_id" "$extra_link_file")"
-        links="$(_md_variant_links "$kind_id" "$slot_id" "$variants" "$base_url" "$released" "$extra_link_label" "$extra_url")"
+        links="$(_md_variant_links "$kind_id" "$slot_id" "$variants" "$base_url" "$released" "$extra_link_label" "$extra_url" "$public_variants")"
     fi
     printf '%s|%s\n' "$title" "$links"
 }
@@ -325,11 +339,11 @@ render_kind_cell() {
     if [ ${#extra_slot_ids[@]} -eq 0 ]; then
         # No extra slots for this week+kind -- today's exact behavior,
         # completely unchanged.
-        while IFS='|' read -r rkind rlabel rslot rdate rweekday rsuffix rvariants rcancel_extra rconflict rcontent_ref; do
+        while IFS='|' read -r rkind rlabel rslot rdate rweekday rsuffix rvariants rcancel_extra rconflict rcontent_ref rpublic_variants; do
             [ -z "$rkind" ] && continue
             if [ -n "$rconflict" ]; then
                 local tl title links
-                tl="$(_row_title_and_links "$rkind" "$rslot" "$rvariants" "$titles_file" "$allowlist_file" "$base_url" "$extra_link_label" "$extra_link_file" "$graded_file" "$source_links_file")"
+                tl="$(_row_title_and_links "$rkind" "$rslot" "$rvariants" "$titles_file" "$allowlist_file" "$base_url" "$extra_link_label" "$extra_link_file" "$graded_file" "$source_links_file" "$rpublic_variants")"
                 title="${tl%%|*}"
                 links="${tl#*|}"
                 cell_parts+=("⚠️ ${title} (${links})")
@@ -348,7 +362,7 @@ render_kind_cell() {
                 continue
             }
             local tl title links
-            tl="$(_row_title_and_links "$rkind" "$rslot" "$rvariants" "$titles_file" "$allowlist_file" "$base_url" "$extra_link_label" "$extra_link_file" "$graded_file" "$source_links_file")"
+            tl="$(_row_title_and_links "$rkind" "$rslot" "$rvariants" "$titles_file" "$allowlist_file" "$base_url" "$extra_link_label" "$extra_link_file" "$graded_file" "$source_links_file" "$rpublic_variants")"
             title="${tl%%|*}"
             links="${tl#*|}"
             cell_parts+=("${title} (${links})")
@@ -358,13 +372,14 @@ render_kind_cell() {
         # "-in-class" supplement) -- group by exact composed-title match
         # via _md_group_add instead of always adding a separate entry.
         _MD_GROUP_TITLE=() _MD_GROUP_ENTRY=() _MD_GROUP_SLOT=() _MD_GROUP_COUNT=()
-        local primary_variants=""
-        while IFS='|' read -r rkind rlabel rslot rdate rweekday rsuffix rvariants rcancel_extra rconflict rcontent_ref; do
+        local primary_variants="" primary_public_variants=""
+        while IFS='|' read -r rkind rlabel rslot rdate rweekday rsuffix rvariants rcancel_extra rconflict rcontent_ref rpublic_variants; do
             [ -z "$rkind" ] && continue
             primary_variants="$rvariants"
+            primary_public_variants="$rpublic_variants"
             if [ -n "$rconflict" ]; then
                 local tl title links
-                tl="$(_row_title_and_links "$rkind" "$rslot" "$rvariants" "$titles_file" "$allowlist_file" "$base_url" "$extra_link_label" "$extra_link_file" "$graded_file" "$source_links_file")"
+                tl="$(_row_title_and_links "$rkind" "$rslot" "$rvariants" "$titles_file" "$allowlist_file" "$base_url" "$extra_link_label" "$extra_link_file" "$graded_file" "$source_links_file" "$rpublic_variants")"
                 title="${tl%%|*}"
                 links="${tl#*|}"
                 cell_parts+=("⚠️ ${title} (${links})")
@@ -383,7 +398,7 @@ render_kind_cell() {
                 continue
             }
             local tl title links
-            tl="$(_row_raw_title_and_links "$rkind" "$rslot" "$rvariants" "$titles_file" "$allowlist_file" "$base_url" "$extra_link_label" "$extra_link_file" "$graded_file" "$source_links_file")"
+            tl="$(_row_raw_title_and_links "$rkind" "$rslot" "$rvariants" "$titles_file" "$allowlist_file" "$base_url" "$extra_link_label" "$extra_link_file" "$graded_file" "$source_links_file" "$rpublic_variants")"
             title="${tl%%|*}"
             links="${tl#*|}"
             _md_group_add "$title" "$rslot" "$links"
@@ -392,7 +407,7 @@ render_kind_cell() {
         for ((es_i = 0; es_i < ${#extra_slot_ids[@]}; es_i++)); do
             local es="${extra_slot_ids[$es_i]}"
             local tl title links
-            tl="$(_row_raw_title_and_links "$kind_id" "$es" "$primary_variants" "$titles_file" "$allowlist_file" "$base_url" "$extra_link_label" "$extra_link_file" "$graded_file" "$source_links_file")"
+            tl="$(_row_raw_title_and_links "$kind_id" "$es" "$primary_variants" "$titles_file" "$allowlist_file" "$base_url" "$extra_link_label" "$extra_link_file" "$graded_file" "$source_links_file" "$primary_public_variants")"
             title="${tl%%|*}"
             links="${tl#*|}"
             _md_group_add "$title" "$es" "$links"
