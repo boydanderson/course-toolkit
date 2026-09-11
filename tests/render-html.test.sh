@@ -596,6 +596,61 @@ EOF
     assert_contains "CAL_RECESS_BG set: recess row gets that background" \
         "$out" "background:#eaeaea;text-align:center"
 
+    # Recess week IS current-week-highlighted when TODAY actually falls
+    # inside it (recess_monday..recess_monday+7 -- same Monday-anchored
+    # comparison as a real teaching week's is_current) -- this is the
+    # fix for the bug where the recess row never highlighted at all,
+    # regardless of today's date. Combined palette: CAL_CURRENT_BG/
+    # CAL_CURRENT_BORDER (fields 7/8) AND CAL_RECESS_BG (field 14) both
+    # set, so this also confirms current_bg wins over recess_bg on the
+    # week that's actually current (recess week here: 24-28 Aug 2026, so
+    # 26 Aug lands inside it).
+    local recess_current_palette="||||||#ffeeee|#ff0000||||||#eaeaea"
+    out="$(render_html_calendar "$kinds2" 2026-08-10 4 2 "$titles" "$allowlist2" \
+        /dev/null /dev/null https://x /dev/null /dev/null "$recess_current_palette" 2026-08-26)"
+    local recess_row_current
+    recess_row_current="$(echo "$out" | grep "Recess Week")"
+    assert_contains "recess week current (26 Aug, inside 24-28 Aug): gets the This week marker" \
+        "$recess_row_current" "This week"
+    assert_contains "recess week current: uses CAL_CURRENT_BG, not CAL_RECESS_BG" \
+        "$recess_row_current" "background:#ffeeee;"
+    assert_not_contains "recess week current: CAL_RECESS_BG is NOT also applied" \
+        "$recess_row_current" "#eaeaea"
+    assert_contains "recess week current: gets the border-left accent, same as a current teaching week" \
+        "$recess_row_current" "border-left:4px solid #ff0000;"
+
+    # Control: same combined palette, but TODAY is in week 1 (10 Aug),
+    # nowhere near the 24-28 Aug recess week -- the recess row must NOT
+    # highlight (mutual exclusivity: only one row is ever "current"), and
+    # week 1's own row gets the highlight instead, confirming the recess
+    # check didn't just always fire.
+    out="$(render_html_calendar "$kinds2" 2026-08-10 4 2 "$titles" "$allowlist2" \
+        /dev/null /dev/null https://x /dev/null /dev/null "$recess_current_palette" 2026-08-10)"
+    local recess_row_not_current week1_row_recess_test
+    recess_row_not_current="$(echo "$out" | grep "Recess Week")"
+    week1_row_recess_test="$(echo "$out" | grep '>1 &#128205;')"
+    assert_not_contains "recess week NOT current (today=10 Aug, week 1): no This week marker" \
+        "$recess_row_not_current" "This week"
+    assert_contains "recess week NOT current: falls back to CAL_RECESS_BG" \
+        "$recess_row_not_current" "background:#eaeaea;"
+    assert_contains "meanwhile week 1 (the actually-current week) gets its own This week marker" \
+        "$week1_row_recess_test" "This week"
+
+    # Backward compat: a course that only ever set CAL_RECESS_BG (never
+    # opted into CAL_CURRENT_BG/CAL_CURRENT_BORDER) sees no marker/accent
+    # on the recess row even when TODAY genuinely falls inside it --
+    # current-week highlighting stays opt-in, same gate as teaching weeks.
+    out="$(render_html_calendar "$kinds2" 2026-08-10 4 2 "$titles" "$allowlist2" \
+        /dev/null /dev/null https://x /dev/null /dev/null "$recess_bg_palette" 2026-08-26)"
+    local recess_row_bg_only
+    recess_row_bg_only="$(echo "$out" | grep "Recess Week")"
+    assert_not_contains "recess week current but no current_bg/border opt-in: no This week marker" \
+        "$recess_row_bg_only" "This week"
+    assert_not_contains "recess week current but no opt-in: no border-left accent" \
+        "$recess_row_bg_only" "border-left"
+    assert_contains "recess week current but no opt-in: still just plain CAL_RECESS_BG" \
+        "$recess_row_bg_only" "background:#eaeaea;"
+
     # COLUMN_WIDTHS (24th positional arg, optional): emits a <colgroup>
     # right after <table>, one <col> per comma-separated width, in order.
     out="$(render_html_calendar "$kinds2" 2026-08-10 1 0 "$titles" "$allowlist2" \

@@ -420,10 +420,14 @@ render_kind_cell_html() {
 # GFM pipe-table (which has no colspan concept at all, so it stays one
 # dash per column there; see that function's own comment). See
 # semester-lib.sh's semester_recess_week for how the recess week itself
-# is computed. Not counted toward row_index
-# (so real teaching weeks' odd/even banding stays undisturbed by
-# whether a recess row was inserted) and not current-week-highlighted
-# (it's never "this week" in the teaching-week sense). PALETTE (12th,
+# is computed. Not counted toward row_index (so real teaching weeks'
+# odd/even banding stays undisturbed by whether a recess row was
+# inserted), but IS current-week-highlighted in its own right when TODAY
+# falls within recess_monday..recess_monday+7 -- same CAL_CURRENT_BG/
+# CAL_CURRENT_BORDER opt-in and "This week" marker convention as a real
+# teaching week's row, so a course landing mid-recess still gets a
+# "this week" cue instead of the row looking identical to any other
+# recess week rendering would. PALETTE (12th,
 # optional) is _calendar_palette's opaque string; see that function's
 # comment. TODAY (13th, optional, YYYY-MM-DD) drives current-week
 # highlighting -- defaults to the live date (SGT) if omitted, or pass a
@@ -525,11 +529,42 @@ render_html_calendar() {
     while IFS='|' read -r teaching_week monday; do
         if [ -n "$recess_monday" ] && [ "$teaching_week" -eq "$((recess_after + 1))" ]; then
             local recess_colspan=$((${#col_kind[@]} + 2))
+
+            # Same Monday-anchored "today falls inside this week" check as
+            # teaching weeks' own is_current below (recess_monday..
+            # recess_monday+7, weekend included) -- previously the recess
+            # row never highlighted at all, no matter what today's date
+            # was, so a course landing mid-recess showed no "this week"
+            # cue anywhere on the page.
+            local recess_is_current=0
+            if [[ ! "$today" < "$recess_monday" ]] && [[ "$today" < "$(add_days "$recess_monday" 7)" ]]; then
+                recess_is_current=1
+            fi
+
+            local recess_td_style="$td_style"
+            if [ "$recess_is_current" = 1 ] && [ -n "$CAL_CURRENT_BORDER" ]; then
+                recess_td_style="border:1px solid ${CAL_BORDER};border-left:4px solid ${CAL_CURRENT_BORDER};padding:6px 8px;vertical-align:top;"
+            fi
             local recess_bg_style=""
-            [ -n "$CAL_RECESS_BG" ] && recess_bg_style="background:${CAL_RECESS_BG};"
+            if [ "$recess_is_current" = 1 ] && [ -n "$CAL_CURRENT_BG" ]; then
+                recess_bg_style="background:${CAL_CURRENT_BG};"
+            elif [ -n "$CAL_RECESS_BG" ]; then
+                recess_bg_style="background:${CAL_RECESS_BG};"
+            fi
+
+            # "This week" marker: same opt-in gate (current_bg or
+            # current_border set) as the teaching-week marker below, and
+            # the exact same default label text ("🏖️ Recess Week", no
+            # marker) when not current -- keeps every existing consumer's
+            # rendered output unchanged.
+            local recess_label="🏖️ Recess Week"
+            if [ "$recess_is_current" = 1 ] && { [ -n "$CAL_CURRENT_BG" ] || [ -n "$CAL_CURRENT_BORDER" ]; }; then
+                recess_label="🏖️ Recess Week &#128205; <span style=\"font-weight:normal;color:#99106b;\">This week</span>"
+            fi
+
             echo '<tr>'
-            printf '<td colspan="%d" style="%s%stext-align:center;font-style:italic;color:%s;">🏖️ Recess Week - No classes (%s &ndash; %s)</td>' \
-                "$recess_colspan" "$td_style" "$recess_bg_style" "$CAL_NOTES" \
+            printf '<td colspan="%d" style="%s%stext-align:center;font-style:italic;color:%s;">%s - No classes (%s &ndash; %s)</td>' \
+                "$recess_colspan" "$recess_td_style" "$recess_bg_style" "$CAL_NOTES" "$recess_label" \
                 "$(format_date_short "$recess_monday")" "$(format_date_short "$recess_friday")"
             echo '</tr>'
         fi
