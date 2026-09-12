@@ -153,10 +153,8 @@ _html_variant_links() {
             parts+=("<span style=\"color:${CAL_PENDING};\">${extra_link_label}</span>")
         fi
     fi
-    local out="${parts[0]:-}" i
-    for ((i = 1; i < ${#parts[@]}; i++)); do
-        out="${out} &middot; ${parts[$i]}"
-    done
+    local out=""
+    [ "${#parts[@]}" -gt 0 ] && out="$(_join_middot "${parts[@]}")"
     echo "$out"
 }
 
@@ -187,11 +185,7 @@ _occasion_links_html() {
         fi
     fi
     [ "${#parts[@]}" -eq 0 ] && return 0
-    local out="${parts[0]:-}" i
-    for ((i = 1; i < ${#parts[@]}; i++)); do
-        out="${out} &middot; ${parts[$i]}"
-    done
-    echo "$out"
+    _join_middot "${parts[@]}"
 }
 
 # render_kind_cell_html -- same signature/semantics as render-markdown.sh's

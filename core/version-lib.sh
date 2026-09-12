@@ -93,25 +93,34 @@ get_slot_version() {
     build_date=$(sgt_date '+%Y-%m-%d' "$source_date_epoch")
 
     _with_version_lock _get_slot_version_write "$vf" "$cf" "$id" "$new_version" \
-        "$content_hash" "$build_date" "$current_version_line" "$current_cache_line"
+        "$content_hash" "$build_date" "$current_version_line"
     echo "$new_version"
+}
+
+# _upsert_ledger_line FILE ID NEWLINE -> replaces FILE's existing
+# "ID|..." line with NEWLINE, or appends NEWLINE if ID isn't listed yet.
+# Shared by get_slot_version/bump_slot_version's write helpers, both of
+# which need this exact "in-place update via a tmp file + mv" (neither
+# GNU nor BSD sed's -i takes the same flags, hence awk) against either
+# the version ledger or the hash cache.
+_upsert_ledger_line() {
+    local file="$1" id="$2" newline="$3"
+    if grep -q "^${id}|" "$file" 2>/dev/null; then
+        local tmp; tmp=$(mktemp "${file}.XXXXXX")
+        awk -v id="$id" -v newline="$newline" \
+            'BEGIN { FS="|" } $1==id { print newline; next } { print }' \
+            "$file" > "$tmp"
+        mv "$tmp" "$file"
+    else
+        echo "$newline" >> "$file"
+    fi
 }
 
 _get_slot_version_write() {
     local vf="$1" cf="$2" id="$3" version="$4" hash="$5" date="$6"
-    local existing_version_line="$7" existing_cache_line="$8"
-    if [ -z "$existing_version_line" ]; then
-        echo "${id}|${version}" >> "$vf"
-    fi
-    if [ -z "$existing_cache_line" ]; then
-        echo "${id}|${hash}|${date}" >> "$cf"
-    else
-        local tmp; tmp=$(mktemp "${cf}.XXXXXX")
-        awk -v id="$id" -v newline="${id}|${hash}|${date}" \
-            'BEGIN { FS="|" } $1==id { print newline; next } { print }' \
-            "$cf" > "$tmp"
-        mv "$tmp" "$cf"
-    fi
+    local existing_version_line="$7"
+    [ -z "$existing_version_line" ] && echo "${id}|${version}" >> "$vf"
+    _upsert_ledger_line "$cf" "$id" "${id}|${hash}|${date}"
 }
 
 # bump_slot_version SLOT_ID VARIANT CONTENT_HASH [SOURCE_DATE_EPOCH] ->
@@ -147,20 +156,11 @@ bump_slot_version() {
 
 _bump_slot_version_write() {
     local vf="$1" cf="$2" id="$3" new_version="$4" hash="$5" date="$6"
-    local tmp; tmp=$(mktemp "${vf}.XXXXXX")
-    awk -v id="$id" -v newline="${id}|${new_version}" \
-        'BEGIN { FS="|" } $1==id { print newline; next } { print }' \
-        "$vf" > "$tmp"
-    mv "$tmp" "$vf"
+    # vf's "${id}|" line is guaranteed to already exist here (bump_slot_
+    # version already errored out above otherwise) -- _upsert_ledger_line
+    # still works, just always taking its replace-in-place branch.
+    _upsert_ledger_line "$vf" "$id" "${id}|${new_version}"
 
-    if [ -f "$cf" ] && grep -q "^${id}|" "$cf" 2>/dev/null; then
-        tmp=$(mktemp "${cf}.XXXXXX")
-        awk -v id="$id" -v newline="${id}|${hash}|${date}" \
-            'BEGIN { FS="|" } $1==id { print newline; next } { print }' \
-            "$cf" > "$tmp"
-        mv "$tmp" "$cf"
-    else
-        [ -f "$cf" ] || echo "# Format: SLOT_ID.VARIANT|HASH|BUILD_DATE" > "$cf"
-        echo "${id}|${hash}|${date}" >> "$cf"
-    fi
+    [ -f "$cf" ] || echo "# Format: SLOT_ID.VARIANT|HASH|BUILD_DATE" > "$cf"
+    _upsert_ledger_line "$cf" "$id" "${id}|${hash}|${date}"
 }

@@ -77,11 +77,8 @@ _md_variant_links() {
             parts+=("$extra_link_label")
         fi
     fi
-    local out="${parts[0]:-}"
-    local i
-    for ((i = 1; i < ${#parts[@]}; i++)); do
-        out="$out &middot; ${parts[$i]}"
-    done
+    local out=""
+    [ "${#parts[@]}" -gt 0 ] && out="$(_join_middot "${parts[@]}")"
     echo "$out"
 }
 
@@ -110,11 +107,7 @@ _occasion_links_markdown() {
         fi
     fi
     [ "${#parts[@]}" -eq 0 ] && return 0
-    local out="${parts[0]}" i
-    for ((i = 1; i < ${#parts[@]}; i++)); do
-        out="${out} &middot; ${parts[$i]}"
-    done
-    echo "$out"
+    _join_middot "${parts[@]}"
 }
 
 # _row_title_and_links KIND_ID SLOT_ID VARIANTS TITLES_FILE ALLOWLIST_FILE

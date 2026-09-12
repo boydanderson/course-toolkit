@@ -11,13 +11,7 @@ set -euo pipefail
 BACKEND_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source_path="$1" variant="$2" slot_id="${3:-}"
 
-_md5() {
-    if command -v md5sum >/dev/null 2>&1; then
-        md5sum | cut -d' ' -f1
-    else
-        md5 -q
-    fi
-}
+source "$BACKEND_DIR/../lib/md5.sh"
 
 variant_header="$BACKEND_DIR/headers/${variant}.tex"
 {

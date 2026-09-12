@@ -42,27 +42,32 @@ sgt_date() {
     fi
 }
 
-# day_of_week_name DATE -> full weekday name (e.g. "Wednesday"), same
-# GNU/BSD `date` fallback as add_days above.
-day_of_week_name() {
-    date -d "$1" '+%A' 2>/dev/null || date -j -f "%Y-%m-%d" "$1" '+%A' 2>/dev/null
+# _date_fmt DATE FMT -> DATE formatted with `date`'s FMT, same GNU/BSD
+# `date` fallback as add_days above. Shared body for day_of_week_name/
+# format_date_short/format_date_long below, which differ only in FMT.
+_date_fmt() {
+    local d="$1" fmt="$2"
+    if date -d "$d" "$fmt" >/dev/null 2>&1; then
+        date -d "$d" "$fmt"
+    else
+        date -j -f '%Y-%m-%d' "$d" "$fmt"
+    fi
 }
 
-# format_date_short DATE -> "10 Aug" -- same GNU/BSD `date` branching as
-# add_days above. Used for a date shown alongside other context that
-# already pins the year (e.g. a specific teaching week's own date
-# sub-line, or a recess-week range sitting right next to it) -- lives
-# here (not render-html.sh, where it used to live as a private
-# `_format_date_short`) so render-markdown.sh's recess row and
+# day_of_week_name DATE -> full weekday name (e.g. "Wednesday").
+day_of_week_name() {
+    _date_fmt "$1" '+%A' 2>/dev/null
+}
+
+# format_date_short DATE -> "10 Aug". Used for a date shown alongside
+# other context that already pins the year (e.g. a specific teaching
+# week's own date sub-line, or a recess-week range sitting right next to
+# it) -- lives here (not render-html.sh, where it used to live as a
+# private `_format_date_short`) so render-markdown.sh's recess row and
 # render-events.sh's Key Events table can use the identical format
 # without duplicating the `date` branching a second/third time.
 format_date_short() {
-    local d="$1"
-    if date -d "$d" '+%d %b' >/dev/null 2>&1; then
-        date -d "$d" '+%d %b'
-    else
-        date -j -f '%Y-%m-%d' "$d" '+%d %b'
-    fi
+    _date_fmt "$1" '+%d %b'
 }
 
 # format_date_long DATE -> "10 Aug 2026" -- same as format_date_short but
@@ -70,12 +75,7 @@ format_date_short() {
 # context pinning the year (e.g. a Key Events table row, which can list
 # dates months apart with no adjacent week/date-range to anchor them).
 format_date_long() {
-    local d="$1"
-    if date -d "$d" '+%d %b %Y' >/dev/null 2>&1; then
-        date -d "$d" '+%d %b %Y'
-    else
-        date -j -f '%Y-%m-%d' "$d" '+%d %b %Y'
-    fi
+    _date_fmt "$1" '+%d %b %Y'
 }
 
 # is_holiday DATE HOLIDAYS_FILE -> the holiday's name (success/0) if

@@ -605,7 +605,6 @@ hol_date_pat = re.compile(r'(\d{1,2}\s+\w+\s+20\d{2})\s*\(\w+\)\s*(\*)?')
 #  - bullet format: "• National Day"
 #  - lettered format: "(a) National Day"
 name_pat = re.compile(r'^(?:•\s*|\([a-z]\)\s*)([^\n\r]+)', re.IGNORECASE)
-#name_pat = re.compile(r'^(?:•\s*|\([a-z]\)\s*)(.+)$', re.IGNORECASE)
 
 # Used to strip the first date occurrence out of a "name + date" line
 date_strip_pat = re.compile(r'\d{1,2}\s+\w+\s+20\d{2}')
@@ -704,30 +703,6 @@ for _sem_label, band_lower, band_upper in semester_bands:
 
 # 2) University holidays / public holidays:
 # Boxes are not reliably separable by x0 alone, so select by content.
-hol_candidates = []
-for x0, y1, text in elements:
-    # Holidays live below the semester table region; keep this loose
-    if y1 > 500:
-        continue
-
-    t = text.strip()
-    if not t:
-        continue
-
-    # Keep boxes that look like the holiday list / notes
-    if ('Public Holidays' in t) or ('Well-Being' in t) or ('Well-Being' in t) or ('Well-Being' in t):
-        hol_candidates.append((x0, y1, text))
-        continue
-    if '•' in t:
-        hol_candidates.append((x0, y1, text))
-        continue
-    if re.search(r'^\([a-z]\)', t, flags=re.IGNORECASE | re.MULTILINE):
-        hol_candidates.append((x0, y1, text))
-        continue
-    if hol_date_pat.search(t):
-        hol_candidates.append((x0, y1, text))
-        continue
-
 hol_elements = sorted(
     [(x0, y1, text) for x0, y1, text in elements
      if (x0 > 350) and (

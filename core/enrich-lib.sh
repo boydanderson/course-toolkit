@@ -18,6 +18,39 @@ ENRICH_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # enrich-lib.sh keeps getting it from here as well, unchanged.
 source "$ENRICH_LIB_DIR/schedule-lib.sh"
 
+# _lookup_by_key KEY FILE -> FILE's first "KEY|VALUE..." line's VALUE
+# (everything after the first "|"), empty if FILE is missing or KEY isn't
+# listed. Shared body for slot_title/extra_note_for_slot/
+# kind_extra_link_label/source_link_for_slot/extra_link_for_slot below --
+# all five are "look up this key's one config line," differing only in
+# what the key/file/config semantically mean to their own callers.
+# || true: a lookup with nothing recorded yet (e.g. no content-map entry
+# at all) is a normal "nothing to show," not something that should abort
+# a caller running under set -e via grep's "no match" exit status
+# propagating out of a plain command substitution.
+_lookup_by_key() {
+    local key="$1" file="$2"
+    [ -f "$file" ] || return 0
+    grep -vE '^\s*#|^\s*$' "$file" | grep "^${key}|" | head -1 | cut -d'|' -f2- || true
+}
+
+# _join_middot ITEM... -> ITEMs joined with " &middot; ". Shared by
+# render-html.sh's _html_variant_links/_occasion_links_html and
+# render-markdown.sh's _md_variant_links/_occasion_links_markdown, all
+# four of which build a list of already-formatted link/label strings and
+# join them the same way. Callers must not pass zero items ("${arr[@]}"
+# on a zero-element array throws "unbound variable" under bash 3.2's
+# set -u even though the array itself is declared) -- guard with the
+# same "${#arr[@]} -eq 0" check those callers already use elsewhere.
+_join_middot() {
+    local out="$1"; shift
+    local item
+    for item in "$@"; do
+        out="${out} &middot; ${item}"
+    done
+    echo "$out"
+}
+
 # is_slot_released SLOT_ID ALLOWLIST_FILE -> success (0) if SLOT_ID is
 # listed, failure (1) otherwise. One ID per line, comments/blanks
 # ignored -- the same allow-list shape used throughout this ecosystem
@@ -43,14 +76,7 @@ is_graded_slot() {
 # slot_title SLOT_ID TITLES_FILE -> the slot's display title, empty if
 # none recorded. Format: SLOT_ID|TITLE.
 slot_title() {
-    local slot_id="$1" titles_file="$2"
-    [ -f "$titles_file" ] || return 0
-    # || true: a scheduled occurrence with nothing in TITLES_FILE yet
-    # (e.g. no content-map entry at all) is a normal "nothing to show",
-    # not something that should abort a caller running under set -e via
-    # grep's "no match" exit status propagating out of a plain command
-    # substitution.
-    grep -vE '^\s*#|^\s*$' "$titles_file" | grep "^${slot_id}|" | head -1 | cut -d'|' -f2- || true
+    _lookup_by_key "$1" "$2"
 }
 
 # compose_slot_title SLOT_ID TITLE -> "SLOT_ID: TITLE", or just SLOT_ID
@@ -303,9 +329,7 @@ kind_extra_slots() {
 # the title+links, same shape render_item's own optional third line
 # already used in the original bespoke code this generalizes.
 extra_note_for_slot() {
-    local slot_id="$1" notes_file="$2"
-    [ -f "$notes_file" ] || return 0
-    grep -vE '^\s*#|^\s*$' "$notes_file" | grep "^${slot_id}|" | head -1 | cut -d'|' -f2- || true
+    _lookup_by_key "$1" "$2"
 }
 
 # kind_extra_link_label KIND_ID LABELS_FILE -> the label for this kind's
@@ -315,9 +339,7 @@ extra_note_for_slot() {
 # whatever) just never creates this file -- every kind's cell renders
 # exactly as before.
 kind_extra_link_label() {
-    local kind_id="$1" labels_file="$2"
-    [ -f "$labels_file" ] || return 0
-    grep -vE '^\s*#|^\s*$' "$labels_file" | grep "^${kind_id}|" | head -1 | cut -d'|' -f2- || true
+    _lookup_by_key "$1" "$2"
 }
 
 # source_link_for_slot SLOT_ID SOURCE_LINKS_FILE -> the path/URL a slot's
@@ -329,9 +351,7 @@ kind_extra_link_label() {
 # link instead of the usual View/Print/Sheet variant links when this is
 # set for a slot.
 source_link_for_slot() {
-    local slot_id="$1" source_links_file="$2"
-    [ -f "$source_links_file" ] || return 0
-    grep -vE '^\s*#|^\s*$' "$source_links_file" | grep "^${slot_id}|" | head -1 | cut -d'|' -f2- || true
+    _lookup_by_key "$1" "$2"
 }
 
 # extra_link_for_slot SLOT_ID LINKS_FILE -> the URL for this slot's
@@ -340,9 +360,7 @@ source_link_for_slot() {
 # list it when it's ready" convention as is_slot_released). Format:
 # SLOT_ID|URL, one per line.
 extra_link_for_slot() {
-    local slot_id="$1" links_file="$2"
-    [ -f "$links_file" ] || return 0
-    grep -vE '^\s*#|^\s*$' "$links_file" | grep "^${slot_id}|" | head -1 | cut -d'|' -f2- || true
+    _lookup_by_key "$1" "$2"
 }
 
 # occasion_links WEEK KIND_ID LINKS_FILE -> "LABEL1|URL1|LABEL2|URL2"

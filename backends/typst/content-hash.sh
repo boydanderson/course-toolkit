@@ -14,16 +14,11 @@
 # SLOT_ID is accepted for contract-compatibility but unused -- this
 # backend has no PLACEHOLDER_SLOT-style substitution, see build-slot.sh.
 set -uo pipefail
+BACKEND_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source_path="$1" variant="$2"
 # slot_id="${3:-}"  # accepted, unused -- see header comment.
 
-_md5() {
-    if command -v md5sum >/dev/null 2>&1; then
-        md5sum | cut -d' ' -f1
-    else
-        md5 -q
-    fi
-}
+source "$BACKEND_DIR/../lib/md5.sh"
 
 if [ ! -f "$source_path" ]; then
     echo "content-hash.sh: source file not found: $source_path" >&2
