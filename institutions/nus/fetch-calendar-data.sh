@@ -35,19 +35,14 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/calendar-data-lib.sh"
+source "$SCRIPT_DIR/../../core/course-lib.sh"
 
 COURSE_ROOT="${COURSE_ROOT:-.}"
 cd "$COURSE_ROOT"
 
 COURSE_MK="config/course.mk"
-course_var() {
-    [ -f "$COURSE_MK" ] || return 0
-    grep -E "^$1[[:space:]]*=" "$COURSE_MK" | head -1 \
-        | sed -E 's/^[A-Za-z_][A-Za-z_0-9]*[[:space:]]*=[[:space:]]*//' || true
-}
-
-COURSE_CODE="$(course_var COURSE_CODE)"
-START_DATE="${1:-$(course_var SEMESTER_START_MONDAY)}"
+COURSE_CODE="$(get_course_var COURSE_CODE)"
+START_DATE="${1:-$(get_course_var SEMESTER_START_MONDAY)}"
 START_DATE="${START_DATE:-2026-08-10}"
 
 start_year=$(echo "$START_DATE" | cut -d'-' -f1)

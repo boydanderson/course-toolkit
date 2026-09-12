@@ -29,10 +29,7 @@ RENDER_HTML_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$RENDER_HTML_DIR/schedule-lib.sh"
 source "$RENDER_HTML_DIR/semester-lib.sh"
 source "$RENDER_HTML_DIR/enrich-lib.sh"
-
-_html_escape() {
-    sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g'
-}
+source "$RENDER_HTML_DIR/html-lib.sh"
 
 # _calendar_palette -- the calendar's colors, generic defaults out of
 # the box, overridable per-course via config/course.mk (see cli.sh's
@@ -188,6 +185,33 @@ _occasion_links_html() {
     _join_middot "${parts[@]}"
 }
 
+# _row_title_and_links_html KIND_ID SLOT_ID VARIANTS TITLES_FILE
+# ALLOWLIST_FILE BASE_URL EXTRA_LINK_LABEL EXTRA_LINK_FILE GRADED_FILE
+# PALETTE [PUBLIC_VARIANTS] -> "TITLE|LINKS" (TITLE already has its
+# graded "🔴 " prefix and compose_slot_title's own SLOT_ID prefix
+# applied, still HTML-unescaped -- callers escape it themselves at the
+# point it's embedded, same as before this existed). Shared body for
+# render_kind_cell_html's three near-identical blocks below (a normal
+# row, a HOLIDAY_CONFLICT_WEEKS row, and an EXTRA_SLOTS_FILE row) --
+# mirrors render-markdown.sh's _row_title_and_links, HTML output instead
+# of markdown, and no SOURCE_LINKS_FILE param (render_kind_cell_html has
+# no source-link feature to begin with).
+_row_title_and_links_html() {
+    local kind_id="$1" slot_id="$2" variants="$3" titles_file="$4" allowlist_file="$5"
+    local base_url="$6" extra_link_label="$7" extra_link_file="$8" graded_file="$9"
+    local palette="${10:-}" public_variants="${11:-}"
+    local title released links extra_url=""
+    title="$(slot_title "$slot_id" "$titles_file")"
+    title="$(compose_slot_title "$slot_id" "$title")"
+    if [ -n "$graded_file" ] && is_graded_slot "$slot_id" "$graded_file"; then
+        title="🔴 ${title}"
+    fi
+    if is_slot_released "$slot_id" "$allowlist_file"; then released=1; else released=0; fi
+    [ -n "$extra_link_label" ] && extra_url="$(extra_link_for_slot "$slot_id" "$extra_link_file")"
+    links="$(_html_variant_links "$kind_id" "$slot_id" "$variants" "$base_url" "$released" "$palette" "$extra_link_label" "$extra_url" "$public_variants")"
+    printf '%s|%s\n' "$title" "$links"
+}
+
 # render_kind_cell_html -- same signature/semantics as render-markdown.sh's
 # render_kind_cell (see that function's header comment for the
 # holiday-cancellation and SUFFIX_FILTER behavior), HTML output. PALETTE
@@ -332,15 +356,10 @@ render_kind_cell_html() {
         primary_variants="$rvariants"
         primary_public_variants="$rpublic_variants"
         if [ -n "$rconflict" ]; then
-            local title released links extra_url=""
-            title="$(slot_title "$rslot" "$titles_file")"
-            title="$(compose_slot_title "$rslot" "$title")"
-            if [ -n "$graded_file" ] && is_graded_slot "$rslot" "$graded_file"; then
-                title="🔴 ${title}"
-            fi
-            if is_slot_released "$rslot" "$allowlist_file"; then released=1; else released=0; fi
-            [ -n "$extra_link_label" ] && extra_url="$(extra_link_for_slot "$rslot" "$extra_link_file")"
-            links="$(_html_variant_links "$rkind" "$rslot" "$rvariants" "$base_url" "$released" "$palette" "$extra_link_label" "$extra_url" "$rpublic_variants")"
+            local tl title links
+            tl="$(_row_title_and_links_html "$rkind" "$rslot" "$rvariants" "$titles_file" "$allowlist_file" "$base_url" "$extra_link_label" "$extra_link_file" "$graded_file" "$palette" "$rpublic_variants")"
+            title="${tl%%|*}"
+            links="${tl#*|}"
             cell_html="${cell_html}<div style=\"font-weight:600;\">⚠️ $(echo "$title" | _html_escape)</div><div style=\"margin-top:2px;font-size:0.85rem;\">${links}</div>"
             if [ -n "$extra_note_file" ]; then
                 local extra_note
@@ -370,15 +389,10 @@ render_kind_cell_html() {
             any_cancelled=1
             continue
         }
-        local title released links extra_url=""
-        title="$(slot_title "$rslot" "$titles_file")"
-        title="$(compose_slot_title "$rslot" "$title")"
-        if [ -n "$graded_file" ] && is_graded_slot "$rslot" "$graded_file"; then
-            title="🔴 ${title}"
-        fi
-        if is_slot_released "$rslot" "$allowlist_file"; then released=1; else released=0; fi
-        [ -n "$extra_link_label" ] && extra_url="$(extra_link_for_slot "$rslot" "$extra_link_file")"
-        links="$(_html_variant_links "$rkind" "$rslot" "$rvariants" "$base_url" "$released" "$palette" "$extra_link_label" "$extra_url" "$rpublic_variants")"
+        local tl title links
+        tl="$(_row_title_and_links_html "$rkind" "$rslot" "$rvariants" "$titles_file" "$allowlist_file" "$base_url" "$extra_link_label" "$extra_link_file" "$graded_file" "$palette" "$rpublic_variants")"
+        title="${tl%%|*}"
+        links="${tl#*|}"
         cell_html="${cell_html}<div style=\"font-weight:600;\">$(echo "$title" | _html_escape)</div><div style=\"margin-top:2px;font-size:0.85rem;\">${links}</div>"
         if [ -n "$extra_note_file" ]; then
             local extra_note
@@ -391,15 +405,10 @@ render_kind_cell_html() {
         local es_i
         for ((es_i = 0; es_i < ${#extra_slot_ids[@]}; es_i++)); do
             local es="${extra_slot_ids[$es_i]}"
-            local title released links extra_url=""
-            title="$(slot_title "$es" "$titles_file")"
-            title="$(compose_slot_title "$es" "$title")"
-            if [ -n "$graded_file" ] && is_graded_slot "$es" "$graded_file"; then
-                title="🔴 ${title}"
-            fi
-            if is_slot_released "$es" "$allowlist_file"; then released=1; else released=0; fi
-            [ -n "$extra_link_label" ] && extra_url="$(extra_link_for_slot "$es" "$extra_link_file")"
-            links="$(_html_variant_links "$kind_id" "$es" "$primary_variants" "$base_url" "$released" "$palette" "$extra_link_label" "$extra_url" "$primary_public_variants")"
+            local tl title links
+            tl="$(_row_title_and_links_html "$kind_id" "$es" "$primary_variants" "$titles_file" "$allowlist_file" "$base_url" "$extra_link_label" "$extra_link_file" "$graded_file" "$palette" "$primary_public_variants")"
+            title="${tl%%|*}"
+            links="${tl#*|}"
             cell_html="${cell_html}<div style=\"font-weight:600;\">$(echo "$title" | _html_escape)</div><div style=\"margin-top:2px;font-size:0.85rem;\">${links}</div>"
         done
     fi

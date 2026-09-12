@@ -10,10 +10,7 @@
 
 RENDER_EVENTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$RENDER_EVENTS_DIR/date-lib.sh"
-
-_html_escape_events() {
-    sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g'
-}
+source "$RENDER_EVENTS_DIR/html-lib.sh"
 
 # _sorted_events EVENTS_FILE -> comment/blank-stripped lines, sorted by
 # DATE (field 1 -- ISO dates sort lexicographically = chronologically).
@@ -65,7 +62,7 @@ render_key_events_html() {
         [ -n "$row_bg" ] && td_style="${cell_base}background:${row_bg};"
         printf '<tr><td style="%s">%s</td><td style="%s">%s&ndash;%s</td><td style="%s">%s</td></tr>\n' \
             "$td_style" "$(format_date_long "$date")" "$td_style" "$start" "$end" \
-            "$td_style" "$(echo "$name" | _html_escape_events)"
+            "$td_style" "$(echo "$name" | _html_escape)"
         i=$((i + 1))
     done <<< "$rows"
     echo '</tbody></table>'
