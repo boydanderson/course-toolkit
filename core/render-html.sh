@@ -309,7 +309,7 @@ render_kind_cell_html() {
         local es
         while IFS= read -r es; do
             [ -n "$es" ] && extra_slot_ids+=("$es")
-        done < <(kind_extra_slots "$week" "$kind_id" "$extra_slots_file")
+        done < <(kind_extra_slots "$week" "$kind_id" "$extra_slots_file" "$suffix_filter")
     fi
     if [ -n "$suffix_filter" ]; then
         rows=$(awk -F'|' -v k="$kind_id" -v s="$suffix_filter" '$1==k && $6==s' "$occurrences_file")

@@ -348,6 +348,13 @@ content_ref_count() {
                 this_week_monday="$(semester_weeks "$start_monday" "$week" "$recess_after_week" | tail -1 | cut -d'|' -f2)"
                 _row_holiday_shift_skip "$this_week_monday" "$w" "$cew" "$holidays_file" && is_holiday_week=1
             fi
+            # A HOLIDAY_CONFLICT_WEEKS week is held in place (rendered
+            # with a warning, not cancelled), so it keeps its content
+            # line like any other eligible week -- same override as
+            # occurrence_count's.
+            if [ "$is_holiday_week" -eq 1 ] && [ -n "$hcw" ] && [ "$hcw" != "-" ]; then
+                case ",${hcw}," in *",${week},"*) is_holiday_week=0 ;; esac
+            fi
             if [ "$is_holiday_week" -eq 1 ]; then
                 if [ "$week" -eq "$target_week" ] && [ "$w" = "$target_weekday" ] && [ "$s" = "$target_suffix" ]; then
                     return 1

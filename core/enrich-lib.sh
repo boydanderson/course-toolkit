@@ -310,10 +310,15 @@ week_key_event_notes() {
 # never creates EXTRA_SLOTS_FILE just never gets this behavior (see
 # render-markdown.sh's render_kind_cell / render-html.sh's
 # render_kind_cell_html, both take it as an optional trailing param).
+# With SUFFIX (a split column's own suffix), a suffix-qualified key
+# ("session-S2", same convention as slot_kind_label's) also matches, so
+# an extra shows only in its own session's column; a plain KIND_ID row
+# still shows in every column of that kind.
 kind_extra_slots() {
-    local week="$1" kind_id="$2" extra_slots_file="$3"
+    local week="$1" kind_id="$2" extra_slots_file="$3" suffix="${4:-}"
     [ -f "$extra_slots_file" ] || return 0
-    awk -F'|' -v w="$week" -v k="$kind_id" '$1==w && $2==k {print $3}' "$extra_slots_file"
+    awk -F'|' -v w="$week" -v k="$kind_id" -v ks="${suffix:+$kind_id-$suffix}" \
+        '$1==w && ($2==k || (ks != "" && $2==ks)) {print $3}' "$extra_slots_file"
 }
 
 # extra_note_for_slot SLOT_ID NOTES_FILE -> arbitrary already-rendered

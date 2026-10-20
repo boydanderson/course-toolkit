@@ -16,6 +16,12 @@
 #   canvas             Print an HTML calendar table to stdout.
 #   bump SLOT_ID VARIANT
 #                     Explicitly bump one slot/variant's version.
+#   place             Regenerate CONTENT_MAP_FILE, GRADED_SLOTS_FILE and
+#                     EXTRA_SLOTS_FILE from CONTENT_ORDER_FILE, holiday-
+#                     aware: a cancelled session pushes every later item
+#                     forward one session (see placement-lib.sh). Those
+#                     three files are then generated -- edit the order
+#                     file and re-run instead of editing them.
 #
 # Requires COURSE_ROOT (the consuming repo's root; defaults to the
 # working directory) and TOOLKIT_DIR (this submodule's path -- defaults
@@ -31,6 +37,9 @@
 # just sets the env var instead of renaming anything:
 #   SESSION_KINDS_FILE   default: config/session-kinds.conf
 #   CONTENT_MAP_FILE     default: config/content-map.conf
+#   CONTENT_ORDER_FILE   default: config/content-order.conf (`place`
+#                          only -- KIND_ID|SOURCE_PATH[|FLAGS] in
+#                          curriculum order, see placement-lib.sh)
 #   ALLOWLIST_FILE        default: config/release-allowlist.conf
 #   LABELS_FILE           default: config/session-kind-labels.conf
 #   NOTES_FILE            default: config/week-notes.conf
@@ -159,12 +168,14 @@ source "$TOOLKIT_DIR/core/render-markdown.sh"
 source "$TOOLKIT_DIR/core/render-html.sh"
 source "$TOOLKIT_DIR/core/render-events.sh"
 source "$TOOLKIT_DIR/core/render-holidays-reference.sh"
+source "$TOOLKIT_DIR/core/placement-lib.sh"
 
 RENDERER="$(get_course_var RENDERER)"
 export RENDERER
 
 SESSION_KINDS="${SESSION_KINDS_FILE:-$COURSE_ROOT/config/session-kinds.conf}"
 CONTENT_MAP="${CONTENT_MAP_FILE:-$COURSE_ROOT/config/content-map.conf}"
+CONTENT_ORDER="${CONTENT_ORDER_FILE:-$COURSE_ROOT/config/content-order.conf}"
 ALLOWLIST="${ALLOWLIST_FILE:-$COURSE_ROOT/config/release-allowlist.conf}"
 LABELS="${LABELS_FILE:-$COURSE_ROOT/config/session-kind-labels.conf}"
 NOTES="${NOTES_FILE:-$COURSE_ROOT/config/week-notes.conf}"
@@ -208,39 +219,63 @@ _content_map_path() {
     grep -vE '^\s*#|^\s*$' "$CONTENT_MAP" 2>/dev/null | grep "^${1}|" | head -1 | cut -d'|' -f2- || true
 }
 
+# _walk_slot KIND SLOT_ID VARIANTS [TITLES_OUT] -> one content-mapped
+# slot's share of _walk_semester: extract its title (appended to
+# TITLES_OUT as "SLOT_ID|TITLE" if given), track every variant's version,
+# and compile each variant when CLI_BUILD_PDFS=1. A slot with no
+# content-map entry (or a missing source file) is silently skipped.
+_walk_slot() {
+    local kind="$1" slot_id="$2" variants="$3" titles_out="${4:-}"
+    local source_path
+    source_path="$(_content_map_path "$slot_id")"
+    [ -z "$source_path" ] || [ ! -f "$source_path" ] && return 0
+    local title
+    title="$(backend_extract_title "$source_path" "$slot_id")"
+    [ -n "$titles_out" ] && echo "${slot_id}|${title}" >> "$titles_out"
+    local -a vlist
+    IFS=',' read -ra vlist <<< "$variants"
+    [ "$variants" = "none" ] && vlist=("")
+    local v variant_key content_hash
+    for v in "${vlist[@]}"; do
+        [ -z "$v" ] && variant_key="none" || variant_key="$v"
+        content_hash="$(backend_content_hash "$source_path" "$variant_key" "$slot_id")"
+        get_slot_version "$slot_id" "$variant_key" "$content_hash" > /dev/null
+        if [ "${CLI_BUILD_PDFS:-0}" = 1 ]; then
+            local out_pdf="$COURSE_ROOT/build/toolkit-pdfs/${kind}-${slot_id}$([ -n "$v" ] && echo ".$v").pdf"
+            backend_build_slot "$source_path" "$variant_key" "$out_pdf" "$slot_id"
+            echo "built ${slot_id} (${variant_key}) -> ${out_pdf}" >&2
+        fi
+    done
+}
+
 # _walk_semester [TITLES_OUT] -> for every scheduled+content-mapped
 # slot/variant this semester, track its version (always) and, if
 # TITLES_OUT is given, append "SLOT_ID|TITLE" lines to it (truncated
 # first). Shared by `build`, `readme`, and `canvas` so the latter two
-# never depend on `build` having run first.
+# never depend on `build` having run first. A week's EXTRA_SLOTS_FILE
+# slots are walked too, with the variants of the occurrence whose
+# KIND_ID (or KIND_ID-SUFFIX) they're keyed by.
 _walk_semester() {
     local titles_out="${1:-}"
     [ -n "$titles_out" ] && : > "$titles_out"
+    local occ
+    occ="$(mktemp)"
     while IFS='|' read -r teaching_week monday; do
+        week_occurrences "$SESSION_KINDS" "$monday" "$teaching_week" "$HOLIDAYS" "$SEMESTER_START_MONDAY" "$RECESS_AFTER_WEEK" > "$occ"
         while IFS='|' read -r kind label slot_id date weekday suffix variants cancel_extra; do
             [ -z "$kind" ] && continue
-            local source_path
-            source_path="$(_content_map_path "$slot_id")"
-            [ -z "$source_path" ] || [ ! -f "$source_path" ] && continue
-            local title
-            title="$(backend_extract_title "$source_path" "$slot_id")"
-            [ -n "$titles_out" ] && echo "${slot_id}|${title}" >> "$titles_out"
-            local -a vlist
-            IFS=',' read -ra vlist <<< "$variants"
-            [ "$variants" = "none" ] && vlist=("")
-            local v variant_key content_hash
-            for v in "${vlist[@]}"; do
-                [ -z "$v" ] && variant_key="none" || variant_key="$v"
-                content_hash="$(backend_content_hash "$source_path" "$variant_key" "$slot_id")"
-                get_slot_version "$slot_id" "$variant_key" "$content_hash" > /dev/null
-                if [ "${CLI_BUILD_PDFS:-0}" = 1 ]; then
-                    local out_pdf="$COURSE_ROOT/build/toolkit-pdfs/${kind}-${slot_id}$([ -n "$v" ] && echo ".$v").pdf"
-                    backend_build_slot "$source_path" "$variant_key" "$out_pdf" "$slot_id"
-                    echo "built ${slot_id} (${variant_key}) -> ${out_pdf}" >&2
-                fi
-            done
-        done < <(week_occurrences "$SESSION_KINDS" "$monday" "$teaching_week" "$HOLIDAYS" "$SEMESTER_START_MONDAY" "$RECESS_AFTER_WEEK")
+            _walk_slot "$kind" "$slot_id" "$variants" "$titles_out"
+        done < "$occ"
+        [ -f "$EXTRA_SLOTS" ] || continue
+        local es_key es_slot es_kind es_variants
+        while IFS='|' read -r es_key es_slot; do
+            es_kind="" es_variants=""
+            IFS='|' read -r es_kind es_variants < <(awk -F'|' -v OFS='|' -v key="$es_key" \
+                '$1 == key || $1 "-" $6 == key { print $1, $7; exit }' "$occ") || true
+            [ -n "$es_kind" ] && _walk_slot "$es_kind" "$es_slot" "$es_variants" "$titles_out"
+        done < <(grep -vE '^\s*#|^\s*$' "$EXTRA_SLOTS" | awk -F'|' -v OFS='|' -v w="$teaching_week" '$1 == w { print $2, $3 }')
     done < <(semester_weeks "$SEMESTER_START_MONDAY" "$NUM_WEEKS" "$RECESS_AFTER_WEEK")
+    rm -f "$occ"
 }
 
 cmd_build() {
@@ -314,13 +349,56 @@ cmd_bump() {
     bump_slot_version "$slot_id" "$variant" "$content_hash"
 }
 
+# _write_if_changed TARGET NEW_FILE -> replaces TARGET with NEW_FILE only
+# if their contents differ, so a no-op `place` never touches mtimes.
+_write_if_changed() {
+    local target="$1" new_file="$2"
+    if [ -f "$target" ] && cmp -s "$target" "$new_file"; then
+        echo "$(basename "$target") unchanged" >&2
+    else
+        cp "$new_file" "$target"
+        echo "Updated $target" >&2
+    fi
+    rm -f "$new_file"
+}
+
+cmd_place() {
+    if [ ! -f "$CONTENT_ORDER" ]; then
+        echo "cli.sh place: no content order file at $CONTENT_ORDER" >&2
+        exit 1
+    fi
+    local placed
+    placed="$(mktemp)"
+    if ! place_content "$SESSION_KINDS" "$CONTENT_ORDER" "$HOLIDAYS" \
+        "$SEMESTER_START_MONDAY" "$NUM_WEEKS" "$RECESS_AFTER_WEEK" > "$placed"; then
+        rm -f "$placed"
+        echo "cli.sh place: more content than sessions -- nothing written" >&2
+        exit 1
+    fi
+    local header="# GENERATED by \`cli.sh place\` from $(basename "$CONTENT_ORDER") -- do not hand-edit."
+    local map graded extras
+    map="$(mktemp)"; graded="$(mktemp)"; extras="$(mktemp)"
+    { echo "$header"; echo "# SLOT_ID|SOURCE_PATH"; cut -d'|' -f1,2 "$placed"; } > "$map"
+    { echo "$header"; echo "# SLOT_ID -- graded/assessed sessions";
+      awk -F'|' '(","$3",") ~ /,graded,/ { print $1 }' "$placed"; } > "$graded"
+    # An extra's key is suffix-qualified (e.g. session-S2) so it shows only
+    # in its own session's column -- see enrich-lib.sh's kind_extra_slots.
+    { echo "$header"; echo "# WEEK|KIND_ID|SLOT_ID -- extra handouts sharing a session";
+      awk -F'|' -v OFS='|' '$7 != "" { print $4, ($6 == "-" ? $5 : $5 "-" $6), $1 }' "$placed"; } > "$extras"
+    rm -f "$placed"
+    _write_if_changed "$CONTENT_MAP" "$map"
+    _write_if_changed "$GRADED_SLOTS" "$graded"
+    _write_if_changed "$EXTRA_SLOTS" "$extras"
+}
+
 case "${1:-}" in
     build) shift; cmd_build "$@" ;;
     readme) cmd_readme ;;
     canvas) cmd_canvas ;;
     bump) shift; cmd_bump "$@" ;;
+    place) cmd_place ;;
     *)
-        echo "Usage: $0 {build [--pdfs]|readme|canvas|bump SLOT_ID VARIANT}" >&2
+        echo "Usage: $0 {build [--pdfs]|readme|canvas|bump SLOT_ID VARIANT|place}" >&2
         exit 1
         ;;
 esac

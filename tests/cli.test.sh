@@ -1,3 +1,5 @@
+source "$TOOLKIT_DIR/core/date-lib.sh"
+
 test_cli() {
     local scratch
     scratch="$(mktemp -d)"
@@ -240,6 +242,41 @@ test_cli() {
     assert_failure "cli bump with only SLOT_ID (missing VARIANT) fails" \
         env COURSE_ROOT="$scratch" TOOLKIT_DIR="$TOOLKIT_DIR" \
             CONTENT_MAP_FILE="$scratch/config/content-map.conf" "$cli" bump L1A
+
+    # place: one ordered content list -> content map, graded slots and
+    # extra slots, with a holiday-cancelled session pushing everything
+    # after it forward one session; build then walks the extra slots too.
+    local placed
+    placed="$(mktemp -d)"
+    mkdir -p "$placed/config"
+    cp "$TOOLKIT_DIR/tests/fixtures/demo101/config/course.mk" "$placed/config/course.mk"
+    local start
+    start="$(grep -E '^SEMESTER_START_MONDAY' "$placed/config/course.mk" | sed 's/.*= *//')"
+    printf 'lecture|Lecture|wed|A|L{n}{suffix}|view|1|13|-\n' > "$placed/config/session-kinds.conf"
+    printf 'lecture|Lecture|fri|B|L{n}{suffix}|view|1|13|-\n' >> "$placed/config/session-kinds.conf"
+    printf '%s|Some Holiday\n' "$(add_days "$start" 2)" > "$placed/config/holidays.conf"
+    local body="$TOOLKIT_DIR/tests/fixtures/demo101/L1A-body.tex"
+    printf 'lecture|%s\nlecture|%s|graded\n+Notes|%s\n' "$body" "$body" "$body" \
+        > "$placed/config/content-order.conf"
+    assert_success "cli place succeeds" \
+        env COURSE_ROOT="$placed" TOOLKIT_DIR="$TOOLKIT_DIR" "$cli" place
+    assert_contains "cli place skips the cancelled L1A" \
+        "$(cat "$placed/config/content-map.conf")" "L1B|$body"
+    assert_contains "cli place puts the second item in L2A" \
+        "$(cat "$placed/config/content-map.conf")" "L2A|$body"
+    assert_contains "cli place maps the extra to its parent's slot" \
+        "$(cat "$placed/config/content-map.conf")" "L2A-Notes|$body"
+    assert_contains "cli place writes the graded slot" \
+        "$(grep -v '^#' "$placed/config/graded-slots.conf")" "L2A"
+    assert_contains "cli place keys the extra by its column" \
+        "$(cat "$placed/config/kind-extra-slots.conf")" "2|lecture-A|L2A-Notes"
+    assert_success "cli build after place" \
+        env COURSE_ROOT="$placed" TOOLKIT_DIR="$TOOLKIT_DIR" "$cli" build
+    assert_contains "cli build tracks the extra slot's version" \
+        "$(cat "$placed/config/versions.conf")" "L2A-Notes.view|1.0"
+    assert_failure "cli place with no order file fails" \
+        env COURSE_ROOT="$scratch" TOOLKIT_DIR="$TOOLKIT_DIR" "$cli" place
+    rm -rf "$placed"
 
     rm -rf "$scratch"
 }

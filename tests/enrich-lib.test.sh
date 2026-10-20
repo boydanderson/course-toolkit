@@ -217,5 +217,16 @@ EOF
     assert_eq "week_key_event_notes: missing file is empty, not an error" \
         "" "$(week_key_event_notes 2026-10-05 "$scratch/nope.conf")"
 
+    # kind_extra_slots: a suffix-qualified key matches only its own
+    # column; a plain KIND_ID key matches every column of that kind.
+    printf '9|session-S2|W9S2-Spec\n9|session|W9-Shared\n' > "$scratch/extra-slots.conf"
+    assert_eq "kind_extra_slots: S2 column gets its own extra and the shared one" \
+        "W9S2-Spec
+W9-Shared" "$(kind_extra_slots 9 session "$scratch/extra-slots.conf" S2)"
+    assert_eq "kind_extra_slots: S1 column gets only the shared one" \
+        "W9-Shared" "$(kind_extra_slots 9 session "$scratch/extra-slots.conf" S1)"
+    assert_eq "kind_extra_slots: no suffix ignores suffix-qualified rows" \
+        "W9-Shared" "$(kind_extra_slots 9 session "$scratch/extra-slots.conf")"
+
     rm -rf "$scratch"
 }
