@@ -182,6 +182,11 @@ All config-driven and opt-in — omitting a file just omits the feature.
 - **Key Events** — `config/key-events.conf`
   (`DATE|START_TIME|END_TIME|NAME`), appended as a table after the
   calendar. Dates shown as "10 Aug 2026" (`format_date_long`).
+- **Key Event links** (HTML only) — `config/key-event-links.conf`
+  (`NAME|LABEL1|URL1|LABEL2|URL2|...`, any number of pairs), shown under
+  the event's name in the Key Events table, e.g. an exam's past papers.
+  Keyed by NAME, so it works when `key-events.conf` is generated. An
+  empty URL renders as a greyed-out pending label.
 - **Extra Notes-column categories** — `config/special-dates.conf`
   (`DATE|NAME`) and Key Events both also surface in the weekly Notes
   column, alongside holidays and the maintainer note, in that fixed

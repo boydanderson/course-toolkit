@@ -57,6 +57,9 @@
 #                          the main calendar; see render-events.sh. Also
 #                          fed into `readme`'s own Notes column -- see
 #                          SPECIAL_DATES_FILE below)
+#   KEY_EVENT_LINKS_FILE  default: config/key-event-links.conf (optional,
+#                          NAME|LABEL|URL|... -- `canvas` only. Links shown
+#                          under each Key Events row; see render-events.sh)
 #   SPECIAL_DATES_FILE    default: config/special-dates.conf (optional,
 #                          DATE|NAME -- `readme` only. Surfaces a non-
 #                          holiday calendar marker in the weekly Notes
@@ -182,6 +185,7 @@ NOTES="${NOTES_FILE:-$COURSE_ROOT/config/week-notes.conf}"
 HOLIDAYS="${HOLIDAYS_FILE:-$COURSE_ROOT/config/holidays.conf}"
 EMOJI="${EMOJI_FILE:-$COURSE_ROOT/config/holiday-emoji.conf}"
 KEY_EVENTS="${KEY_EVENTS_FILE:-$COURSE_ROOT/config/key-events.conf}"
+KEY_EVENT_LINKS="${KEY_EVENT_LINKS_FILE:-$COURSE_ROOT/config/key-event-links.conf}"
 SPECIAL_DATES="${SPECIAL_DATES_FILE:-$COURSE_ROOT/config/special-dates.conf}"
 SOURCE_LINKS="${SOURCE_LINKS_FILE:-$COURSE_ROOT/config/source-links.conf}"
 HOLIDAY_FIRST="${HOLIDAY_FIRST:-}"
@@ -325,7 +329,7 @@ cmd_canvas() {
     rm -f "$titles"
 
     local key_events
-    key_events="$(render_key_events_html "$KEY_EVENTS")"
+    key_events="$(render_key_events_html "$KEY_EVENTS" "" "$KEY_EVENT_LINKS")"
     if [ -n "$key_events" ]; then
         printf '\n<h2>Key Events</h2>\n%s\n' "$key_events"
     fi

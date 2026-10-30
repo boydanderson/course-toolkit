@@ -85,5 +85,37 @@ EOF
     assert_contains "markdown: event name passes through unescaped" \
         "$(render_key_events_markdown "$special")" "Q&A <Session>"
 
+    # Optional LINKS_FILE: NAME|LABEL|URL|... with any number of pairs,
+    # shown under the event name; an empty URL is a greyed pending label.
+    local links="$scratch/key-event-links.conf"
+    cat > "$links" <<'EOF'
+# comment
+Final Exam|Details|https://example.org/exam|Past Papers|https://example.org/papers|Venue|
+Sumobot Competition|Results & Awards|
+EOF
+    assert_eq "key_event_links: returns the pairs after NAME" \
+        "Details|https://example.org/exam|Past Papers|https://example.org/papers|Venue|" \
+        "$(key_event_links "Final Exam" "$links")"
+    assert_eq "key_event_links: unknown event is empty" \
+        "" "$(key_event_links "Midterm" "$links")"
+    assert_eq "key_event_links: missing file is empty, not an error" \
+        "" "$(key_event_links "Final Exam" "$scratch/nope.conf")"
+
+    local linked
+    linked="$(render_key_events_html "$events" "" "$links")"
+    assert_contains "html links: first link" "$linked" \
+        "<a href=\"https://example.org/exam\">Details</a> &middot; <a href=\"https://example.org/papers\">Past Papers</a>"
+    assert_contains "html links: more than two links, empty URL is pending" "$linked" \
+        "&middot; <span style=\"color:#888888;\">Venue</span>"
+    assert_contains "html links: label is escaped" "$linked" \
+        "<span style=\"color:#888888;\">Results &amp; Awards</span>"
+    local coloured
+    coloured="$(render_key_events_html "$events" "||||#0b5fae|#aaaaaa" "$links")"
+    assert_contains "html links: link colour comes from PALETTE's 5th field" \
+        "$coloured" "<a href=\"https://example.org/exam\" style=\"color:#0b5fae;\">Details</a>"
+    assert_contains "html links: pending colour comes from PALETTE's 6th field" \
+        "$coloured" "color:#aaaaaa;\">Venue"
+    assert_not_contains "html with no links file: no link line" "$html" "<a href"
+
     rm -rf "$scratch"
 }
