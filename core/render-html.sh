@@ -643,14 +643,17 @@ render_html_calendar() {
         maintainer_note="$(week_note "$teaching_week" "$notes_file")"
         [ -n "$maintainer_note" ] && note_parts+=("$maintainer_note")
         class_wds="$(class_weekdays "$kinds_conf" "$teaching_week")"
-        holiday_note="$(week_holiday_notes "$monday" "$holidays_file" "$emoji_file" "$class_wds")"
+        # Maintainer notes are deliberately trusted HTML (the notes-file
+        # contract); calendar-derived text is data and must still be escaped
+        # before the parts are combined into one Notes cell.
+        holiday_note="$(week_holiday_notes "$monday" "$holidays_file" "$emoji_file" "$class_wds" | _html_escape)"
         [ -n "$holiday_note" ] && note_parts+=("$holiday_note")
         if [ -n "$special_dates_file" ]; then
-            special_note="$(week_special_date_notes "$monday" "$special_dates_file")"
+            special_note="$(week_special_date_notes "$monday" "$special_dates_file" | _html_escape)"
             [ -n "$special_note" ] && note_parts+=("$special_note")
         fi
         if [ -n "$key_events_file" ]; then
-            key_event_note="$(week_key_event_notes "$monday" "$key_events_file")"
+            key_event_note="$(week_key_event_notes "$monday" "$key_events_file" | _html_escape)"
             [ -n "$key_event_note" ] && note_parts+=("$key_event_note")
         fi
         local note=""
@@ -662,7 +665,7 @@ render_html_calendar() {
             done
         fi
         [ -z "$note" ] && note="-"
-        printf '<td style="%sfont-size:0.85rem;color:%s;">%s</td>' "$row_style" "$CAL_NOTES" "$(echo "$note" | _html_escape)"
+        printf '<td style="%sfont-size:0.85rem;color:%s;">%s</td>' "$row_style" "$CAL_NOTES" "$note"
         echo '</tr>'
     done < <(semester_weeks "$start_monday" "$num_weeks" "$recess_after")
     rm -f "$occ_file"

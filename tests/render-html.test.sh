@@ -170,10 +170,12 @@ EOF
     assert_contains "week 2 (before WEEK_START=3) shows the label override" "$out" "Custom Label"
 
     local notes="$scratch/notes.conf"
-    printf '1|A <special> & noted week\n' > "$notes"
+    printf '1|See <a href="https://example.org/notes">the maintainer note</a>.\n' > "$notes"
     out="$(render_html_calendar "$kinds" 2026-08-10 1 0 "$titles" "$allowlist" \
         /dev/null "$notes" https://x /dev/null /dev/null)"
-    assert_contains "a week note is escaped in the Notes column" "$out" "A &lt;special&gt; &amp; noted week"
+    assert_contains "maintainer-authored HTML is preserved in the Notes column" \
+        "$out" '<a href="https://example.org/notes">the maintainer note</a>'
+    assert_not_contains "maintainer-authored HTML is not escaped" "$out" '&lt;a href='
     out="$(render_html_calendar "$kinds" 2026-08-10 1 0 /dev/null /dev/null \
         /dev/null /dev/null https://x /dev/null /dev/null)"
     assert_contains "a week with no note falls back to a bare '-' cell" "$out" '>-</td>'
@@ -376,14 +378,15 @@ EOF
     # the Notes column alongside the maintainer note and holiday notes,
     # mirroring render_markdown_calendar's own equivalent params.
     local sd_file="$scratch/special-dates.conf" ke_file="$scratch/key-events.conf"
-    printf '2026-08-12|Add/Drop Period Ends\n' > "$sd_file"
-    printf '2026-08-13|09:00|11:00|Orientation\n' > "$ke_file"
+    printf '2026-08-12|Add/Drop <Period> Ends\n' > "$sd_file"
+    printf '2026-08-13|09:00|11:00|Orientation & Welcome\n' > "$ke_file"
     out="$(render_html_calendar "$kinds" 2026-08-10 1 0 /dev/null /dev/null \
         /dev/null /dev/null https://x /dev/null /dev/null "" "" "" "" "" "" "" "" \
         "$sd_file" "$ke_file")"
     assert_contains "SPECIAL_DATES_FILE: special date shows in Notes" \
-        "$out" "Add/Drop Period Ends"
-    assert_contains "KEY_EVENTS_FILE: key event shows in Notes" "$out" "Orientation"
+        "$out" "Add/Drop &lt;Period&gt; Ends"
+    assert_contains "KEY_EVENTS_FILE: key event shows in Notes" \
+        "$out" "Orientation &amp; Welcome"
 
     # Extra link (Recording-style): _html_variant_links directly.
     local links
