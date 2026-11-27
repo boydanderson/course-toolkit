@@ -511,6 +511,23 @@ EOF
     assert_contains "SOURCE_LINKS_FILE + grouping: extra slot's source link" \
         "$out" "[source](src/studios/studio-S3-in-class.tex)"
 
+    # README_TITLE_LINKS: a single link moves onto the title.
+    assert_eq "_md_cell: default keeps the parenthesis" \
+        "T ([Student](u/x.pdf))" "$(_md_cell T "[Student](u/x.pdf)")"
+    assert_eq "_md_cell: README_TITLE_LINKS links the title" \
+        "[T](u/x.pdf)" "$(README_TITLE_LINKS=1 _md_cell T "[Student](u/x.pdf)")"
+    assert_eq "_md_cell: README_TITLE_LINKS, unreleased -> plain title" \
+        "T" "$(README_TITLE_LINKS=1 _md_cell T "Student")"
+    assert_eq "_md_cell: README_TITLE_LINKS keeps several links" \
+        "T ([View](a) &middot; [Print](b))" "$(README_TITLE_LINKS=1 _md_cell T "[View](a) &middot; [Print](b)")"
+    assert_eq "_md_cell: README_TITLE_LINKS keeps a grouped entry" \
+        "T (S3: View; S3-x: View)" "$(README_TITLE_LINKS=1 _md_cell T "S3: View; S3-x: View")"
+    local tl_out
+    tl_out="$(README_TITLE_LINKS=1 render_markdown_calendar "$kinds" 2026-08-10 4 0 "$titles" "$allowlist" \
+        /dev/null /dev/null https://example.org/pdfs /dev/null /dev/null)"
+    assert_contains "render_markdown_calendar: README_TITLE_LINKS still shows several variants" \
+        "$tl_out" "[View](https://example.org/pdfs/lecture-L4A.view.pdf)"
+
     # HOLIDAY_FIRST: swaps the cancellation phrase order -- 17th param.
     local hf_holidays="$scratch/hf-holidays.conf"
     printf '2026-08-12|Test Holiday\n' > "$hf_holidays"

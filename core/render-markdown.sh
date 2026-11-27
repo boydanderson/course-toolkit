@@ -110,6 +110,29 @@ _occasion_links_markdown() {
     _join_middot "${parts[@]}"
 }
 
+# _md_cell TITLE LINKS -> one cell entry, "TITLE (LINKS)". With
+# README_TITLE_LINKS set (any non-empty value, an environment variable
+# like HOLIDAY_FIRST), an entry whose LINKS is a single item drops the
+# parenthesis: a single "[LABEL](URL)" link becomes "[TITLE](URL)" and
+# a single plain label (not released yet) becomes just "TITLE". For a
+# course with one public variant, where "(Student)" says nothing.
+# Several links (joined by " &middot; ") or a grouped "SLOT: LINKS; ..."
+# entry keep the parenthesis. Unset = today's exact output.
+_md_cell() {
+    local title="$1" links="$2"
+    if [ -n "${README_TITLE_LINKS:-}" ]; then
+        local re_link='^\[[^]]*\]\(([^)]*)\)$' re_plain='^[^][():;&]+$'
+        if [[ "$links" =~ $re_link ]]; then
+            echo "[${title}](${BASH_REMATCH[1]})"
+            return
+        elif [[ "$links" =~ $re_plain ]]; then
+            echo "$title"
+            return
+        fi
+    fi
+    echo "${title} (${links})"
+}
+
 # _row_title_and_links KIND_ID SLOT_ID VARIANTS TITLES_FILE ALLOWLIST_FILE
 # BASE_URL EXTRA_LINK_LABEL EXTRA_LINK_FILE GRADED_FILE [SOURCE_LINKS_FILE]
 # [PUBLIC_VARIANTS] -> "TITLE|LINKS" (split by the caller on the first
@@ -348,7 +371,7 @@ render_kind_cell() {
                 tl="$(_row_title_and_links "$rkind" "$rslot" "$rvariants" "$titles_file" "$allowlist_file" "$base_url" "$extra_link_label" "$extra_link_file" "$graded_file" "$source_links_file" "$rpublic_variants")"
                 title="${tl%%|*}"
                 links="${tl#*|}"
-                cell_parts+=("⚠️ ${title} (${links})")
+                cell_parts+=("⚠️ $(_md_cell "$title" "$links")")
                 continue
             fi
             local holiday_name
@@ -367,7 +390,7 @@ render_kind_cell() {
             tl="$(_row_title_and_links "$rkind" "$rslot" "$rvariants" "$titles_file" "$allowlist_file" "$base_url" "$extra_link_label" "$extra_link_file" "$graded_file" "$source_links_file" "$rpublic_variants")"
             title="${tl%%|*}"
             links="${tl#*|}"
-            cell_parts+=("${title} (${links})")
+            cell_parts+=("$(_md_cell "$title" "$links")")
         done <<< "$rows"
     else
         # One or more extra slots share this week+kind (e.g. a studio's
@@ -384,7 +407,7 @@ render_kind_cell() {
                 tl="$(_row_title_and_links "$rkind" "$rslot" "$rvariants" "$titles_file" "$allowlist_file" "$base_url" "$extra_link_label" "$extra_link_file" "$graded_file" "$source_links_file" "$rpublic_variants")"
                 title="${tl%%|*}"
                 links="${tl#*|}"
-                cell_parts+=("⚠️ ${title} (${links})")
+                cell_parts+=("⚠️ $(_md_cell "$title" "$links")")
                 continue
             fi
             local holiday_name
@@ -418,7 +441,7 @@ render_kind_cell() {
         for ((gi = 0; gi < ${#_MD_GROUP_TITLE[@]}; gi++)); do
             local composed
             composed="$(compose_slot_title "${_MD_GROUP_SLOT[$gi]}" "${_MD_GROUP_TITLE[$gi]}")"
-            cell_parts+=("${composed} (${_MD_GROUP_ENTRY[$gi]})")
+            cell_parts+=("$(_md_cell "$composed" "${_MD_GROUP_ENTRY[$gi]}")")
         done
     fi
     # $IFS-based joining only uses IFS's first character, not the whole

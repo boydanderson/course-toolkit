@@ -148,6 +148,11 @@
 #                          order to "<holiday> (No <label>)" instead of
 #                          "No <label> (<holiday>)". Unset/empty keeps
 #                          the default order.
+#   README_TITLE_LINKS     any non-empty value -> `readme` links a
+#                          handout's title itself when it has only one
+#                          link (one public variant), instead of
+#                          "TITLE ([Student](URL))"; an unreleased one
+#                          shows just its title. Unset = off.
 #   CALENDAR_COLUMN_WIDTHS comma-separated CSS width values (one per
 #                          column: Week, then each kind column, then
 #                          Notes) -> `canvas` emits a `<colgroup>` with
