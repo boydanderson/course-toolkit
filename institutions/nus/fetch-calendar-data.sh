@@ -19,7 +19,10 @@
 # What it writes:
 #   config/holidays.conf         DATE|NAME -- Singapore public holidays
 #                                 + NUS-specific holidays (e.g.
-#                                 Well-Being Day) merged. Recess/Reading
+#                                 Well-Being Day) merged, plus Chinese
+#                                 New Year eve when it falls on a weekday
+#                                 (NUS ends classes at 2pm that day; see
+#                                 add_nus_cny_eve). Recess/Reading
 #                                 Week are deliberately NOT included here
 #                                 -- they're date *ranges*, not single-
 #                                 day cancellations; a course's own
@@ -71,6 +74,7 @@ NUS_SPECIAL_DATES=()
 
 fetch_sg_holidays_dynamic "$start_year" "$end_year"
 fetch_nus_calendar_dynamic "$acad_year"
+add_nus_cny_eve
 save_calendar_data_cache "$start_year" "$end_year" "$acad_year"
 
 if [ -n "$COURSE_CODE" ]; then

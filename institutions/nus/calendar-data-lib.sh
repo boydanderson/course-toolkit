@@ -228,6 +228,47 @@ fetch_nus_calendar_dynamic() {
     return 0
 }
 
+# add_nus_cny_eve -> appends "DATE|Chinese New Year Eve (classes end
+# 2pm)" to SG_HOLIDAYS for each Chinese New Year whose eve falls on a
+# weekday. The NUS academic calendar's own note: "the official end time
+# for classes is 2pm when Chinese New Year eve falls on a weekday" -- so
+# any afternoon session that day is lost, and a course that cancels a
+# session for a holiday on any of its days needs the eve listed too.
+# The eve is not a public holiday, so data.gov.sg never lists it, and
+# the PDF gives it only as that footnote; this derives it from the
+# fetched CNY dates instead. The first CNY day is the "Chinese New Year"
+# entry whose previous day is not one too ("(Observed)" entries are
+# skipped). An eve that is already listed is not added twice.
+add_nus_cny_eve() {
+    local entry d name prev eve dow existing found
+    local cny_dates=()
+    for entry in ${SG_HOLIDAYS[@]+"${SG_HOLIDAYS[@]}"}; do
+        d="${entry%%|*}"
+        name="${entry#*|}"
+        case "$name" in
+            *[Oo]bserved*|*[Ee]ve*) ;;
+            "Chinese New Year"*) cny_dates+=("$d") ;;
+        esac
+    done
+    for d in ${cny_dates[@]+"${cny_dates[@]}"}; do
+        prev="$(add_days "$d" -1)"
+        found=false
+        for existing in "${cny_dates[@]}"; do
+            [ "$existing" = "$prev" ] && found=true && break
+        done
+        [ "$found" = true ] && continue
+        eve="$prev"
+        dow="$(_date_fmt "$eve" '+%u')"
+        [ "$dow" -ge 6 ] && continue
+        found=false
+        for existing in "${SG_HOLIDAYS[@]}"; do
+            [ "${existing%%|*}" = "$eve" ] && found=true && break
+        done
+        [ "$found" = true ] && continue
+        SG_HOLIDAYS+=("$eve|Chinese New Year Eve (classes end 2pm)")
+    done
+}
+
 # nus_recess_after_week SEMESTER_START_MONDAY -> the teaching week
 # number a real, fetched recess follows (0 if none), computed from the
 # already-populated NUS_SPECIAL_DATES array (fetch_nus_calendar_dynamic

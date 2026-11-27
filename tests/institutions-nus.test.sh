@@ -89,4 +89,32 @@ test_institutions_nus() {
     assert_contains "load_calendar_data_cache: QUIET does NOT suppress a real error" \
         "$out" "Error: Missing cached Singapore holiday data"
     rm -rf "$scratch"
+
+    # add_nus_cny_eve: the eve of the first CNY day, on a weekday only.
+    SG_HOLIDAYS=(
+        "2027-02-06|Chinese New Year"
+        "2027-02-07|Chinese New Year"
+        "2027-02-08|Chinese New Year (Observed)"
+    )
+    add_nus_cny_eve
+    assert_eq "add_nus_cny_eve: AY2026/27 eve is Fri 2027-02-05" \
+        "2027-02-05|Chinese New Year Eve (classes end 2pm)" "${SG_HOLIDAYS[3]:-}"
+    assert_eq "add_nus_cny_eve: only one eve added" "4" "${#SG_HOLIDAYS[@]}"
+    add_nus_cny_eve
+    assert_eq "add_nus_cny_eve: running twice adds nothing" "4" "${#SG_HOLIDAYS[@]}"
+
+    # 2026: CNY Tue 17 + Wed 18 Feb, eve Mon 16 Feb.
+    SG_HOLIDAYS=("2026-02-17|Chinese New Year" "2026-02-18|Chinese New Year")
+    add_nus_cny_eve
+    assert_eq "add_nus_cny_eve: a Monday eve is added" \
+        "2026-02-16|Chinese New Year Eve (classes end 2pm)" "${SG_HOLIDAYS[2]:-}"
+
+    # CNY on a Sunday (2030-02-03): its eve is a Saturday, so nothing is added.
+    SG_HOLIDAYS=("2030-02-03|Chinese New Year" "2030-02-04|Chinese New Year")
+    add_nus_cny_eve
+    assert_eq "add_nus_cny_eve: a Saturday eve is not added" "2" "${#SG_HOLIDAYS[@]}"
+
+    SG_HOLIDAYS=()
+    add_nus_cny_eve
+    assert_eq "add_nus_cny_eve: no holidays -> nothing added" "0" "${#SG_HOLIDAYS[@]}"
 }
